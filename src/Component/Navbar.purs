@@ -4,21 +4,27 @@ import Prelude
 
 import Component.GameSearch (Size(..))
 import Component.GameSearch as GameSearch
+import DOM.HTML.Indexed.FormMethod as Method
 import Data.Maybe (Maybe(..))
-import Effect.Aff.Class (class MonadAff)
-import Effect.Class (class MonadEffect)
-import Halogen (modify_)
+import Effect.Aff.Class (class MonadAff, liftAff)
+import Effect.Class (class MonadEffect, liftEffect)
+import FFI.Dialog (openModal)
+import Halogen (get, modify_)
 import Halogen as H
 import Halogen.HTML as HH
+import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (InputType(..))
 import Halogen.HTML.Properties as HP
 import Halogen.Svg.Attributes (Color(..))
 import Halogen.Svg.Attributes as SP
-import Halogen.Svg.Attributes.Path (CommandPositionReference(..), h, m)
+import Halogen.Svg.Attributes.Path (CommandArcChoice(..), CommandPositionReference(..), CommandSweepChoice(..), a, h, l, m, v)
 import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
 import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Route (Route(..), navigate)
+import Supabase (Client)
+import Supabase as Supabase
+import Supabase.Auth (UserEmail(..))
 import Type.Proxy (Proxy(..))
 import Types (SessionInfo)
 
@@ -28,32 +34,49 @@ _search = Proxy :: Proxy "search"
 type State =
   { currentRoute :: Route
   , session :: Maybe SessionInfo
+  , loginEmail :: String
+  , client :: Client
   }
 
-data Action = GameSearchOutput GameSearch.Output | UpdateRoute Route
+type Input = { currentRoute :: Route, client :: Client }
+
+data Action
+  = GameSearchOutput GameSearch.Output
+  | UpdateRoute Route
+  | LoginClicked
+  | SignInUser
+  | LoginEmailUpdated String
 
 data Output = UserLoggedIn SessionInfo
 
-component :: forall query m. MonadAff m => MonadEffect m => H.Component query Route Output m
+component :: forall query m. MonadAff m => MonadEffect m => H.Component query Input Output m
 component = H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval { handleAction = handleAction, receive = receive }
   , render
   }
 
-receive :: Route -> Maybe Action
-receive r = Just $ UpdateRoute r
+receive :: Input -> Maybe Action
+receive { currentRoute } = Just $ UpdateRoute currentRoute
 
-initialState :: Route -> State
-initialState currentRoute = { currentRoute, session: Nothing }
+initialState :: Input -> State
+initialState { currentRoute, client } = { currentRoute, session: Nothing, loginEmail: "", client }
 
 handleAction :: forall output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction (GameSearchOutput (GameSearch.GameSelected bg)) =
   navigate (GameR bg.bggId)
 handleAction (UpdateRoute r) = modify_ _ { currentRoute = r }
+handleAction LoginClicked = liftEffect $ openModal "#signin-modal"
+handleAction SignInUser = do
+  { loginEmail, client } <- get
+  results <- liftAff $ Supabase.sendOtpToEmail { email: UserEmail loginEmail } client
+  case results.error of
+    Just _err -> pure unit
+    Nothing -> pure unit
+handleAction (LoginEmailUpdated str) = modify_ _ { loginEmail = str }
 
 render :: forall m. MonadAff m => MonadEffect m => State -> HH.ComponentHTML Action Slots m
-render { currentRoute, session } =
+render state@{ currentRoute, session } =
   HH.div [ HP.class_ (H.ClassName "max-lg:collapse bg-base-200 shadow-sm w-full rounded-md") ]
     [ HH.input
         [ HP.id "navbar-1-toggle"
@@ -104,7 +127,7 @@ render { currentRoute, session } =
                               , HH.li_ [ HH.button_ [ HH.text "Logout" ] ]
                               ]
                           ]
-                        Nothing -> HH.a [ HP.class_ (H.ClassName "btn btn-primary") ] [ HH.text "Login" ]
+                        Nothing -> HH.button [ HP.class_ (H.ClassName "btn btn-primary"), HE.onClick (\_ -> LoginClicked) ] [ HH.text "Login" ]
                     ]
                 ]
             ]
@@ -122,4 +145,82 @@ render { currentRoute, session } =
                 ]
             ]
         ]
+    , signinModal state
     ]
+
+signinModal :: forall m. MonadAff m => MonadEffect m => State -> HH.ComponentHTML Action Slots m
+signinModal state = HH.dialog
+  [ HP.id "signin-modal"
+  , HP.class_ (H.ClassName "modal")
+  ]
+  [ HH.div [ HP.class_ (H.ClassName "modal-box") ]
+      [ HH.form [ HP.method Method.Dialog ] [ HH.button [ HP.class_ (H.ClassName "btn btn-sm btn-circle btn-ghost absolute right-2 top-2") ] [ HH.text "✕" ] ]
+      , HH.h3 [ HP.class_ (H.ClassName "text-lg font-bold") ] [ HH.text "Sign In to Your Account" ]
+      , HH.div [ HP.class_ (H.ClassName "py-4 flex w-full flex-col") ]
+          [ HH.div [ HP.class_ (H.ClassName "card bg-base-300 rounded-box grid shadow-sm") ]
+              [ HH.div [ HP.class_ (H.ClassName "card-body") ]
+                  [ HH.div [ HP.class_ (H.ClassName "card-title flex justify-start") ]
+                      [ Svg.svg
+                          [ SP.fill NoColor
+                          , SP.viewBox 0.0 0.0 24.0 24.0
+                          , SP.strokeWidth 1.5
+                          , SP.stroke (Named "currentColor")
+                          , SP.class_ (H.ClassName "size-10")
+                          ]
+                          [ Svg.path
+                              [ SP.strokeLineCap LineCapRound
+                              , SP.strokeLineJoin LineJoinRound
+                              , SP.d
+                                  [ m Abs 21.75 6.75
+                                  , v Rel 10.5
+                                  , a Rel 2.25 2.25 0.0 Arc0 Sweep1 (-2.25) 2.25
+                                  , h Rel (-15.0)
+                                  , a Rel 2.25 2.25 0.0 Arc0 Sweep1 (-2.25) (-2.25)
+                                  , v Abs 6.75
+                                  , m Rel 19.5 0.0
+                                  , a Abs 2.25 2.25 0.0 Arc0 Sweep0 19.5 4.5
+                                  , h Rel (-15.0)
+                                  , a Rel 2.25 2.25 0.0 Arc0 Sweep0 (-2.25) 2.25
+                                  , m Rel 19.5 0.0
+                                  , v Rel 0.243
+                                  , a Rel 2.25 2.25 0.0 Arc0 Sweep1 (-1.07) 1.916
+                                  , l Rel (-7.5) 4.615
+                                  , a Rel 2.25 2.25 0.0 Arc0 Sweep1 (-2.36) 0.0
+                                  , l Abs 3.32 8.91
+                                  , a Rel 2.25 2.25 0.0 Arc0 Sweep1 (-1.07) (-1.916)
+                                  , v Abs 6.75
+                                  ]
+                              ]
+                          ]
+                      , HH.div [ HP.class_ (H.ClassName "flex flex-col items-start") ]
+                          [ HH.p_ [ HH.text "Magic Email Link" ]
+                          , HH.p [ HP.class_ (H.ClassName "text-sm") ] [ HH.text "Sign in instantly via your inbox." ]
+                          , HH.p [ HP.class_ (H.ClassName "text-sm") ] [ HH.text "You'll be signed up automatically." ]
+                          ]
+
+                      ]
+                  , HH.div [ HP.class_ (H.ClassName "flex") ]
+                      [ HH.fieldset [ HP.class_ (H.ClassName "fieldset w-full") ]
+                          [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ]
+                              [ HH.text "Email Address" ]
+                          , HH.input
+                              [ HP.class_ (H.ClassName "input w-full")
+                              , HP.type_ InputEmail
+                              , HP.placeholder "you@example.com"
+                              , HE.onValueInput LoginEmailUpdated
+                              , HP.value state.loginEmail
+                              ]
+                          ]
+                      ]
+                  , HH.button [ HP.class_ (H.ClassName "w-full btn btn-primary"), HE.onClick (\_ -> SignInUser) ]
+                      [ HH.text "Send Magic Link" ]
+                  ]
+              ]
+          ]
+      ]
+  , HH.form
+      [ HP.method Method.Dialog
+      , HP.class_ (H.ClassName "modal-backdrop")
+      ]
+      [ HH.button_ [ HH.text "close" ] ]
+  ]

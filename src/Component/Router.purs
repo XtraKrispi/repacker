@@ -15,6 +15,7 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
 import Route (Route(..))
+import Supabase (Client)
 import Type.Proxy (Proxy(..))
 import Types (SessionInfo)
 
@@ -26,16 +27,19 @@ type Slots =
 _page = Proxy :: Proxy "page"
 _navbar = Proxy :: Proxy "navbar"
 
+type Input = { initialRoute :: Route, client :: Client }
+
 type State =
   { currentRoute :: Route
   , session :: Maybe SessionInfo
+  , client :: Client
   }
 
 data Query a = ChangeRoute Route a
 
 data Action = NavbarOutput Navbar.Output
 
-component :: forall output m. MonadAff m => MonadEffect m => H.Component Query Route output m
+component :: forall output m. MonadAff m => MonadEffect m => H.Component Query Input output m
 component = H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval
@@ -45,8 +49,12 @@ component = H.mkComponent
   , render
   }
 
-initialState :: Route -> State
-initialState currentRoute = { currentRoute, session: Nothing }
+initialState :: Input -> State
+initialState { initialRoute, client } =
+  { currentRoute: initialRoute
+  , session: Nothing
+  , client
+  }
 
 handleQuery :: forall a action output m. MonadAff m => MonadEffect m => Query a -> H.HalogenM State action Slots output m (Maybe a)
 handleQuery (ChangeRoute route a) = do
@@ -60,7 +68,7 @@ handleAction (NavbarOutput (Navbar.UserLoggedIn session)) =
 
 render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state = HH.div []
-  [ HH.slot _navbar 0 Navbar.component state.currentRoute NavbarOutput
+  [ HH.slot _navbar 0 Navbar.component { currentRoute: state.currentRoute, client: state.client } NavbarOutput
   , HH.div [ HP.class_ (H.ClassName "px-32 pt-4") ]
       [ case state.currentRoute of
           HomeR -> HH.slot_ _page "0" Home.component unit
