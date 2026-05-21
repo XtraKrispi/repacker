@@ -1,0 +1,24 @@
+package:
+  name: repacker-purescript
+  dependencies:
+    - affjax
+    - affjax-web
+    - console
+    - debug
+    - effect
+    - halogen
+    - halogen-svg-elems
+    - prelude
+    - remotedata
+    - routing
+    - routing-duplex
+    - supabase
+    - transformers
+    - web-dom
+  test:
+    main: Test.Main
+    dependencies: []
+workspace:
+  packageSet:
+    registry: 77.3.0
+  extraPackages: {}
