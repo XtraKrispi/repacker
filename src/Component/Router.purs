@@ -8,6 +8,7 @@ import Component.Navbar as Navbar
 import Component.Profile as Profile
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.UUID as UUID
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
@@ -78,7 +79,7 @@ render state = HH.div []
       [ case state.currentRoute of
           HomeR -> HH.slot_ _page "0" Home.component unit
           GameR gameId -> HH.slot_ _page (unwrap gameId) Game.component gameId
-          ProfileR userEmail -> HH.slot_ _page (unwrap userEmail) Profile.component { client: state.client, userEmail, isReadOnly: Just userEmail == (_.email <$> state.session) }
+          ProfileR userId -> HH.slot_ _page (UUID.toString $ unwrap (unwrap userId)) Profile.component { client: state.client, userId, isReadOnly: Just userId /= (_.userId <$> state.session) }
           _ -> HH.div [] []
       ]
   ]

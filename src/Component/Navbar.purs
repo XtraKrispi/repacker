@@ -137,11 +137,21 @@ render state@{ currentRoute, session } =
                           [ HH.summary_ [ HH.text $ fromMaybe (unwrap s.email) s.name ]
                           , HH.ul [ HP.class_ (H.ClassName "p-2 bg-base-100 w-40 z-1") ]
                               [ HH.li_ [ HH.button_ [ HH.text "My Submissions" ] ]
-                              , HH.li_ [ HH.button [ HE.onClick (\_ -> NavigateTo (ProfileR s.email)) ] [ HH.text "My Profile" ] ]
-                              , HH.li_ [ HH.button [ HE.onClick (\_ -> LogOut) ] [ HH.text "Logout" ] ]
+                              , HH.li_
+                                  [ HH.button [ HE.onClick (\_ -> NavigateTo (ProfileR s.userId)) ]
+                                      [ HH.text "My Profile" ]
+                                  ]
+                              , HH.li_
+                                  [ HH.button [ HE.onClick (\_ -> LogOut) ]
+                                      [ HH.text "Logout" ]
+                                  ]
                               ]
                           ]
-                        Nothing -> HH.button [ HP.class_ (H.ClassName "btn btn-primary"), HE.onClick (\_ -> LoginClicked) ] [ HH.text "Login" ]
+                        Nothing -> HH.button
+                          [ HP.class_ (H.ClassName "btn btn-primary")
+                          , HE.onClick (\_ -> LoginClicked)
+                          ]
+                          [ HH.text "Login" ]
                     ]
                 ]
             ]

@@ -32,3 +32,5 @@ type BoardGameBase =
 type BoardGameSummary = { | BoardGameBase }
 
 type BoardGame = { thumbnailUrl :: String, imageUrl :: String | BoardGameBase }
+
+type Profile = { firstName :: String, lastName :: String }
