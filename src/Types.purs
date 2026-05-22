@@ -6,6 +6,8 @@ import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Data.Show.Generic (genericShow)
+import Supabase.Auth (UserEmail(..))
+import Supabase.Auth.Types (UserId(..))
 
 newtype GameId = GameId String
 
@@ -16,9 +18,9 @@ instance showRoute :: Show GameId where
   show = genericShow
 
 type SessionInfo =
-  { email :: String
-  , userId :: String
-  , name :: String
+  { email :: UserEmail
+  , userId :: UserId
+  , name :: Maybe String
   }
 
 type BoardGameBase =

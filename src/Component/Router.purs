@@ -27,7 +27,11 @@ type Slots =
 _page = Proxy :: Proxy "page"
 _navbar = Proxy :: Proxy "navbar"
 
-type Input = { initialRoute :: Route, client :: Client }
+type Input =
+  { initialRoute :: Route
+  , client :: Client
+  , session :: Maybe SessionInfo
+  }
 
 type State =
   { currentRoute :: Route
@@ -50,9 +54,9 @@ component = H.mkComponent
   }
 
 initialState :: Input -> State
-initialState { initialRoute, client } =
+initialState { initialRoute, client, session } =
   { currentRoute: initialRoute
-  , session: Nothing
+  , session
   , client
   }
 
@@ -68,7 +72,7 @@ handleAction (NavbarOutput (Navbar.UserLoggedIn session)) =
 
 render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state = HH.div []
-  [ HH.slot _navbar 0 Navbar.component { currentRoute: state.currentRoute, client: state.client } NavbarOutput
+  [ HH.slot _navbar 0 Navbar.component { currentRoute: state.currentRoute, client: state.client, session: state.session } NavbarOutput
   , HH.div [ HP.class_ (H.ClassName "px-32 pt-4") ]
       [ case state.currentRoute of
           HomeR -> HH.slot_ _page "0" Home.component unit

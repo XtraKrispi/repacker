@@ -5,7 +5,8 @@ import Prelude
 import Component.GameSearch (Size(..))
 import Component.GameSearch as GameSearch
 import DOM.HTML.Indexed.FormMethod as Method
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Newtype (unwrap)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import FFI.Dialog (openModal)
@@ -38,11 +39,15 @@ type State =
   , client :: Client
   }
 
-type Input = { currentRoute :: Route, client :: Client }
+type Input =
+  { currentRoute :: Route
+  , client :: Client
+  , session :: Maybe SessionInfo
+  }
 
 data Action
   = GameSearchOutput GameSearch.Output
-  | UpdateRoute Route
+  | UpdateState Input
   | LoginClicked
   | SignInUser
   | LoginEmailUpdated String
@@ -57,7 +62,7 @@ component = H.mkComponent
   }
 
 receive :: Input -> Maybe Action
-receive { currentRoute } = Just $ UpdateRoute currentRoute
+receive input = Just $ UpdateState input
 
 initialState :: Input -> State
 initialState { currentRoute, client } = { currentRoute, session: Nothing, loginEmail: "", client }
@@ -65,7 +70,7 @@ initialState { currentRoute, client } = { currentRoute, session: Nothing, loginE
 handleAction :: forall output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction (GameSearchOutput (GameSearch.GameSelected bg)) =
   navigate (GameR bg.bggId)
-handleAction (UpdateRoute r) = modify_ _ { currentRoute = r }
+handleAction (UpdateState input) = modify_ _ { currentRoute = input.currentRoute, session = input.session, client = input.client }
 handleAction LoginClicked = liftEffect $ openModal "#signin-modal"
 handleAction SignInUser = do
   { loginEmail, client } <- get
@@ -121,7 +126,7 @@ render state@{ currentRoute, session } =
                 , HH.li []
                     [ case session of
                         Just s -> HH.details_
-                          [ HH.summary_ [ HH.text s.name ]
+                          [ HH.summary_ [ HH.text $ fromMaybe (unwrap s.email) s.name ]
                           , HH.ul [ HP.class_ (H.ClassName "p-2 bg-base-100 w-40 z-1") ]
                               [ HH.li_ [ HH.button_ [ HH.text "My Submissions" ] ]
                               , HH.li_ [ HH.button_ [ HH.text "Logout" ] ]
