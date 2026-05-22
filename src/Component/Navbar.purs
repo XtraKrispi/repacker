@@ -51,8 +51,10 @@ data Action
   | LoginClicked
   | SignInUser
   | LoginEmailUpdated String
+  | LogOut
+  | NavigateTo Route
 
-data Output = UserLoggedIn SessionInfo
+data Output = UserLoggedOut
 
 component :: forall query m. MonadAff m => MonadEffect m => H.Component query Input Output m
 component = H.mkComponent
@@ -67,7 +69,7 @@ receive input = Just $ UpdateState input
 initialState :: Input -> State
 initialState { currentRoute, client } = { currentRoute, session: Nothing, loginEmail: "", client }
 
-handleAction :: forall output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action Slots output m Unit
+handleAction :: forall m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action Slots Output m Unit
 handleAction (GameSearchOutput (GameSearch.GameSelected bg)) =
   navigate (GameR bg.bggId)
 handleAction (UpdateState input) = modify_ _ { currentRoute = input.currentRoute, session = input.session, client = input.client }
@@ -75,10 +77,16 @@ handleAction LoginClicked = liftEffect $ openModal "#signin-modal"
 handleAction SignInUser = do
   { loginEmail, client } <- get
   results <- liftAff $ Supabase.sendOtpToEmail { email: UserEmail loginEmail } client
+  -- Close the modal, display a toast?
   case results.error of
     Just _err -> pure unit
     Nothing -> pure unit
 handleAction (LoginEmailUpdated str) = modify_ _ { loginEmail = str }
+handleAction LogOut = do
+  { client } <- get
+  _ <- liftAff $ Supabase.signOut client
+  H.raise UserLoggedOut
+handleAction (NavigateTo route) = navigate route
 
 render :: forall m. MonadAff m => MonadEffect m => State -> HH.ComponentHTML Action Slots m
 render state@{ currentRoute, session } =
@@ -129,7 +137,8 @@ render state@{ currentRoute, session } =
                           [ HH.summary_ [ HH.text $ fromMaybe (unwrap s.email) s.name ]
                           , HH.ul [ HP.class_ (H.ClassName "p-2 bg-base-100 w-40 z-1") ]
                               [ HH.li_ [ HH.button_ [ HH.text "My Submissions" ] ]
-                              , HH.li_ [ HH.button_ [ HH.text "Logout" ] ]
+                              , HH.li_ [ HH.button [ HE.onClick (\_ -> NavigateTo (ProfileR s.email)) ] [ HH.text "My Profile" ] ]
+                              , HH.li_ [ HH.button [ HE.onClick (\_ -> LogOut) ] [ HH.text "Logout" ] ]
                               ]
                           ]
                         Nothing -> HH.button [ HP.class_ (H.ClassName "btn btn-primary"), HE.onClick (\_ -> LoginClicked) ] [ HH.text "Login" ]

@@ -5,6 +5,7 @@ import Prelude
 import Component.Game as Game
 import Component.Home as Home
 import Component.Navbar as Navbar
+import Component.Profile as Profile
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Effect.Aff.Class (class MonadAff)
@@ -67,8 +68,8 @@ handleQuery (ChangeRoute route a) = do
   pure (Just a)
 
 handleAction :: forall output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action Slots output m Unit
-handleAction (NavbarOutput (Navbar.UserLoggedIn session)) =
-  modify_ _ { session = Just session }
+handleAction (NavbarOutput Navbar.UserLoggedOut) =
+  modify_ _ { session = Nothing }
 
 render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state = HH.div []
@@ -77,6 +78,7 @@ render state = HH.div []
       [ case state.currentRoute of
           HomeR -> HH.slot_ _page "0" Home.component unit
           GameR gameId -> HH.slot_ _page (unwrap gameId) Game.component gameId
+          ProfileR userEmail -> HH.slot_ _page (unwrap userEmail) Profile.component { client: state.client, userEmail, isReadOnly: Just userEmail == (_.email <$> state.session) }
           _ -> HH.div [] []
       ]
   ]

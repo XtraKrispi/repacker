@@ -9,12 +9,14 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Routing.Duplex (RouteDuplex', as, default, path, print, root, segment)
 import Routing.Duplex.Generic as G
 import Routing.Hash (setHash)
+import Supabase.Auth (UserEmail(..))
 import Types (GameId(..))
 
 data Route
   = HomeR
   | GameR GameId
   | NewInstructionsR GameId
+  | ProfileR UserEmail
 
 derive instance genericRoute :: Generic Route _
 derive instance eqRoute :: Eq Route
@@ -27,7 +29,11 @@ routeCodec = default HomeR $ root $ G.sum
   { "HomeR": G.noArgs
   , "GameR": path "game" (gameId segment)
   , "NewInstructionsR": path "game" (path "new" (gameId segment))
+  , "ProfileR": path "profile" (email segment)
   }
+
+email :: RouteDuplex' String -> RouteDuplex' UserEmail
+email = as unwrap (pure <<< UserEmail)
 
 gameId :: RouteDuplex' String -> RouteDuplex' GameId
 gameId = as unwrap (pure <<< GameId)
