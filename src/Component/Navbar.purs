@@ -86,7 +86,8 @@ handleAction LogOut = do
   { client } <- get
   _ <- liftAff $ Supabase.signOut client
   H.raise UserLoggedOut
-handleAction (NavigateTo route) = navigate route
+handleAction (NavigateTo route) = do
+  navigate route
 
 render :: forall m. MonadAff m => MonadEffect m => State -> HH.ComponentHTML Action Slots m
 render state@{ currentRoute, session } =
@@ -124,29 +125,30 @@ render state@{ currentRoute, session } =
             , HH.a [ HP.class_ (H.ClassName "btn btn-ghost text-xl"), HP.href "#/" ] [ HH.text "Repacker" ]
             ]
         , HH.div [ HP.class_ (H.ClassName "navbar-end hidden lg:flex relative") ]
-            [ HH.ul [ HP.class_ (H.ClassName "menu menu-horizontal px-1 flex gap-2 items-center") ]
+            [ HH.div [ HP.class_ (H.ClassName "px-1 flex gap-2 items-center") ]
                 [ if currentRoute == HomeR then
                     HH.text ""
                   else
-                    HH.li [ HP.class_ (H.ClassName "w-80") ]
+                    HH.div [ HP.class_ (H.ClassName "w-80") ]
                       [ HH.slot _search 0 GameSearch.component Regular GameSearchOutput
                       ]
-                , HH.li []
+                , HH.div []
                     [ case session of
-                        Just s -> HH.details_
-                          [ HH.summary_ [ HH.text $ fromMaybe (unwrap s.email) s.name ]
-                          , HH.ul [ HP.class_ (H.ClassName "p-2 bg-base-100 w-40 z-1") ]
-                              [ HH.li_ [ HH.button_ [ HH.text "My Submissions" ] ]
-                              , HH.li_
-                                  [ HH.button [ HE.onClick (\_ -> NavigateTo (ProfileR s.userId)) ]
-                                      [ HH.text "My Profile" ]
-                                  ]
-                              , HH.li_
-                                  [ HH.button [ HE.onClick (\_ -> LogOut) ]
-                                      [ HH.text "Logout" ]
-                                  ]
-                              ]
-                          ]
+                        Just s ->
+                          HH.div [ HP.class_ (H.ClassName "dropdown dropdown-end") ]
+                            [ HH.div [ HP.tabIndex 0, HP.attr (H.AttrName "role") "button", HP.class_ (H.ClassName "btn btn-ghost rounded-field") ] [ HH.text $ fromMaybe (unwrap s.email) s.name ]
+                            , HH.ul [ HP.tabIndex (-1), HP.class_ (H.ClassName "menu dropdown-content bg-base-200 rounded-box z-1 mt-4 w-52 p-2 shadow-sm") ]
+                                [ HH.li_ [ HH.button_ [ HH.text "My Submissions" ] ]
+                                , HH.li [ if currentRoute == ProfileR s.userId then HP.class_ (H.ClassName "menu-active") else HP.style "" ]
+                                    [ HH.button [ HE.onClick (\_ -> NavigateTo (ProfileR s.userId)) ]
+                                        [ HH.text "My Profile" ]
+                                    ]
+                                , HH.li_
+                                    [ HH.button [ HE.onClick (\_ -> LogOut) ]
+                                        [ HH.text "Logout" ]
+                                    ]
+                                ]
+                            ]
                         Nothing -> HH.button
                           [ HP.class_ (H.ClassName "btn btn-primary")
                           , HE.onClick (\_ -> LoginClicked)
