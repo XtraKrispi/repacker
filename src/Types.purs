@@ -5,7 +5,9 @@ import Prelude
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
+import Data.Set (Set)
 import Data.Show.Generic (genericShow)
+import Data.UUID (UUID)
 import Supabase.Auth (UserEmail)
 import Supabase.Auth.Types (UserId)
 import Yoga.JSON (class ReadForeign, class WriteForeign)
@@ -16,6 +18,7 @@ newtype GameId = GameId String
 
 derive instance newtypeGameId :: Newtype GameId _
 derive instance eqGameId :: Eq GameId
+derive instance ordGameId :: Ord GameId
 derive instance genericGameId :: Generic GameId _
 instance showRoute :: Show GameId where
   show = genericShow
@@ -50,13 +53,13 @@ type Instructions =
   , allowsSleeves :: Boolean
   , requiresBaggies :: Boolean
   , steps :: Array PackingStep
-  , includedExpansions :: Array GameId
+  , includedExpansions :: Set GameId
   , otherMaterials :: Array OtherMaterials
   }
 
 type PackingStep =
   { description :: String
-  , imagePath :: String
+  , imageId :: Maybe UUID
   , stepOrdinal :: Int
   }
 
@@ -68,6 +71,9 @@ data OtherMaterials
   | OtherMaterials String
 
 derive instance Generic OtherMaterials _
+
+instance Show OtherMaterials where
+  show = genericShow
 
 instance WriteForeign OtherMaterials where
   writeImpl = genericWriteForeignTaggedSum TaggedSum.defaultOptions

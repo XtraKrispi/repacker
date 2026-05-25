@@ -4,9 +4,11 @@ import Prelude
 
 import Bgg (bggThing)
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
-import Data.Maybe (Maybe(..))
+import Data.Foldable (maximum)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (unwrap)
+import Data.Set as Set
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
 import Halogen (AttrName(..), get, modify_)
@@ -17,8 +19,9 @@ import Halogen.HTML.Properties (ButtonType(..), InputType(..))
 import Halogen.HTML.Properties as HP
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteDate
+import Promise (then_)
 import Supabase (Client, UserId)
-import Types (BoardGame, GameId, Instructions, SessionInfo)
+import Types (BoardGame, GameId, Instructions, SessionInfo, PackingStep)
 
 type CoreData =
   ( client :: Client
@@ -41,14 +44,23 @@ defaultInstructions userId gameId =
   , creator: userId
   , allowsSleeves: false
   , requiresBaggies: false
-  , steps: []
-  , includedExpansions: []
+  , steps: [ defaultStep 1 ]
+  , includedExpansions: Set.empty
   , otherMaterials: []
+  }
+
+defaultStep :: Int -> PackingStep
+defaultStep ordinal =
+  { description: ""
+  , imageId: Nothing
+  , stepOrdinal: ordinal
   }
 
 data Action
   = Initialize
   | UpdateInstructionsDescription String
+  | NewStep
+  | ToggleExpansion GameId
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -70,10 +82,24 @@ handleAction Initialize = do
   eThing <- liftAff $ bggThing gameId
   modify_ _ { game = RemoteDate.fromEither eThing }
 handleAction (UpdateInstructionsDescription str) = modify_ $ \state -> state { instructions = state.instructions { description = str } }
+handleAction NewStep = do
+  { instructions } <- get
+  let nextOrdinal = 1 + fromMaybe 1 (maximum (_.stepOrdinal <$> instructions.steps))
+  modify_ $ \state -> state { instructions = state.instructions { steps = state.instructions.steps <> [ defaultStep nextOrdinal ] } }
+handleAction (ToggleExpansion gameId) = do
+  { instructions } <- get
+  let
+    new =
+      if Set.member gameId instructions.includedExpansions then
+        Set.delete gameId instructions.includedExpansions
+      else Set.insert gameId instructions.includedExpansions
+
+  modify_ _ { instructions = instructions { includedExpansions = new } }
 
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
 render state = HH.div [ HP.class_ (H.ClassName "p-8 min-h-screen") ]
-  [ HH.div [ HP.class_ (H.ClassName "max-w-4xl mx-auto space-y-6") ]
+  [ HH.div [] [ HH.text (show state.instructions) ]
+  , HH.div [ HP.class_ (H.ClassName "max-w-4xl mx-auto space-y-6") ]
       [ HH.header [ HP.class_ (H.ClassName "flex justify-between items-center") ]
           [ HH.div []
               [ HH.h1 [ HP.class_ (H.ClassName "text-3xl font-bold text-primary") ]
@@ -113,19 +139,20 @@ instructionsForm state =
                               [ HH.span [ HP.class_ (H.ClassName "label-text") ] [ HH.text "Select Included Expansions" ]
                               , HH.span [ HP.class_ (H.ClassName "label-text-alt text-info") ] [ HH.text "Check all that apply" ]
                               ]
-                          , HH.div [ HP.class_ (H.ClassName "border border-base-300 rounded-lg max-h-48 overflow-y-auto p-2 bg-base-50 flex flex-col gap-1") ] $ renderExpansion <$> game.expansions
+                          , HH.div [ HP.class_ (H.ClassName "border border-base-300 rounded-lg max-h-48 overflow-y-auto p-2 bg-base-50 flex flex-col gap-1") ]
+                              $ renderExpansion <$> game.expansions
                           ]
                       ]
                   ]
               , HH.div [ HP.class_ (H.ClassName "space-y-4") ]
                   [ HH.h2 [ HP.class_ (H.ClassName "text-xl font-bold") ]
                       [ HH.text "Packing Steps" ]
-                  , HH.div [ HP.class_ (H.ClassName "space-y-4") ]
-                      [ renderStep 1
-                      ]
+                  , HH.div [ HP.class_ (H.ClassName "space-y-4") ] $ renderStep <$> state.instructions.steps
+
                   , HH.button
                       [ HP.class_ (H.ClassName "btn btn-outline btn-block mt-4 border-dashed")
                       , HP.type_ ButtonButton
+                      , HE.onClick (\_ -> NewStep)
                       ]
                       [ HH.text "+ Add Next Step" ]
                   ]
@@ -135,8 +162,8 @@ instructionsForm state =
       ]
     _ -> HH.form [] []
 
-renderStep :: forall slots m. MonadAff m => MonadEffect m => Int -> HH.ComponentHTML Action slots m
-renderStep stepNumber = HH.div [ HP.class_ (H.ClassName "step-item card bg-base-200 shadow-sm border border-base-300") ]
+renderStep :: forall slots m. MonadAff m => MonadEffect m => PackingStep -> HH.ComponentHTML Action slots m
+renderStep step = HH.div [ HP.class_ (H.ClassName "step-item card bg-base-200 shadow-sm border border-base-300") ]
   [ HH.div [ HP.class_ (H.ClassName "card-body p-4 flex flex-row gap-4") ]
       [ HH.div [ HP.class_ (H.ClassName "avatar placeholder") ]
           [ HH.label [ HP.class_ (H.ClassName "bg-neutral text-neutral-content rounded-lg w-24 h-24 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-focus overflow-hidden") ]
@@ -146,7 +173,8 @@ renderStep stepNumber = HH.div [ HP.class_ (H.ClassName "step-item card bg-base-
           ]
       , HH.div [ HP.class_ (H.ClassName "flex-1") ]
           [ HH.div [ HP.class_ (H.ClassName "flex justify-between mb-2") ]
-              [ HH.span [ HP.class_ (H.ClassName "badge badge-ghost step-number") ] [ HH.text $ "Step " <> (show stepNumber) ]
+              [ HH.span [ HP.class_ (H.ClassName "badge badge-ghost step-number") ]
+                  [ HH.text $ "Step " <> (show step.stepOrdinal) ]
               ]
           , HH.textarea
               [ HP.class_ (H.ClassName "textarea textarea-bordered w-full h-24")
@@ -168,5 +196,6 @@ renderExpansion { gameId, title } = HH.label [ HP.class_ (H.ClassName "label cur
       [ HP.type_ InputCheckbox
       , HP.class_ (H.ClassName "checkbox checkbox-sm checkbox-primary")
       , HP.value (unwrap gameId)
+      , HE.onChange (\_ -> ToggleExpansion gameId)
       ]
   ]
