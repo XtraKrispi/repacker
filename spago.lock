@@ -19,7 +19,8 @@
             "routing-duplex",
             "supabase",
             "transformers",
-            "web-dom"
+            "web-dom",
+            "yoga-json"
           ]
         },
         "test": {

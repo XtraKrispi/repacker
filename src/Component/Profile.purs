@@ -21,19 +21,21 @@ import Types (Profile)
 import Web.Event.Event (Event, preventDefault)
 import Web.UIEvent.MouseEvent (MouseEvent)
 
-type Input =
-  { client :: Client
+type CoreData =
+  ( client :: Client
   , userId :: UserId
   , isReadOnly :: Boolean
+  )
+
+type Input =
+  { | CoreData
   }
 
 type State =
-  { client :: Client
-  , userId :: UserId
-  , isReadOnly :: Boolean
-  , profile :: RemoteData String (Maybe Profile)
+  { profile :: RemoteData String (Maybe Profile)
   , firstName :: String
   , lastName :: String
+  | CoreData
   }
 
 data Action

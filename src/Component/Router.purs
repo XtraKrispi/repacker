@@ -4,6 +4,7 @@ import Prelude
 
 import Component.Game as Game
 import Component.Home as Home
+import Component.NewInstructions as NewInstructions
 import Component.Navbar as Navbar
 import Component.Profile as Profile
 import Data.Maybe (Maybe(..))
@@ -77,10 +78,15 @@ render state = HH.div []
   [ HH.slot _navbar 0 Navbar.component { currentRoute: state.currentRoute, client: state.client, session: state.session } NavbarOutput
   , HH.div [ HP.class_ (H.ClassName "px-32 pt-4") ]
       [ case state.currentRoute of
-          HomeR -> HH.slot_ _page "0" Home.component unit
-          GameR gameId -> HH.slot_ _page (unwrap gameId) Game.component gameId
-          ProfileR userId -> HH.slot_ _page (UUID.toString $ unwrap (unwrap userId)) Profile.component { client: state.client, userId, isReadOnly: Just userId /= (_.userId <$> state.session) }
-          _ -> HH.div [] []
+          HomeR -> HH.slot_ _page "home" Home.component unit
+          GameR gameId -> HH.slot_ _page ("game " <> (unwrap gameId)) Game.component { gameId: gameId, client: state.client, session: state.session }
+          ProfileR userId -> HH.slot_ _page ("profile " <> (UUID.toString $ unwrap (unwrap userId))) Profile.component { client: state.client, userId, isReadOnly: Just userId /= (_.userId <$> state.session) }
+          NewInstructionsR gameId -> case state.session of
+            Just s -> HH.slot_ _page ("new-instructions " <> unwrap gameId) NewInstructions.component { client: state.client, gameId, sessionInfo: s }
+            Nothing ->
+              -- TODO: Do something here
+              HH.div [] []
+      -- _ -> HH.div [] []
       ]
   ]
 

@@ -7,6 +7,7 @@ import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.ResponseFormat (document)
 import Affjax.Web (printError, request)
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
+import Data.Array (catMaybes)
 import Data.Either (Either(..), note)
 import Data.HTTP.Method as Http
 import Data.Int (fromString)
@@ -117,5 +118,17 @@ parseThing element = do
     yearPublishedElement <- MaybeT $ querySelector (QuerySelector "yearpublished") parentNode
     yearPublished <- MaybeT $ map Int.fromString <$> getAttribute "value" yearPublishedElement
 
-    pure { bggId: wrap bggId, thumbnailUrl, imageUrl, title, yearPublished }
+    expansionNodes <- MaybeT $ Just <$> (querySelectorAll (QuerySelector "link[type='boardgameexpansion']") parentNode >>= toArray)
 
+    expansions <- MaybeT $ map Just $ catMaybes <$> traverse parseExpansion expansionNodes
+
+    pure { bggId: wrap bggId, thumbnailUrl, imageUrl, title, yearPublished, expansions }
+
+parseExpansion :: Node -> Effect (Maybe { gameId :: GameId, title :: String })
+parseExpansion node =
+  case WDE.fromNode node of
+    Just element -> runMaybeT do
+      id <- MaybeT $ getAttribute "id" element
+      title <- MaybeT $ getAttribute "value" element
+      pure { gameId: wrap id, title: title }
+    Nothing -> pure Nothing

@@ -16,6 +16,7 @@ package:
     - supabase
     - transformers
     - web-dom
+    - yoga-json
   test:
     main: Test.Main
     dependencies: []

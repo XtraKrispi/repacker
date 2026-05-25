@@ -31,7 +31,7 @@ import Types (SessionInfo)
 
 type Slots = (search :: forall query. H.Slot query GameSearch.Output Int)
 _search = Proxy :: Proxy "search"
-
+--TODO: Close the signup modal and provide feedback to user
 type State =
   { currentRoute :: Route
   , session :: Maybe SessionInfo
