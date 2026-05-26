@@ -3,17 +3,22 @@ module Component.NewInstructions where
 import Prelude
 
 import Bgg (bggThing)
+import Component.Helpers (classList)
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
-import Data.Array (filter, mapWithIndex, sortWith)
+import Data.Array (catMaybes, filter, find, intercalate, length, mapWithIndex, null, sortWith)
+import Data.Either (Either(..), fromLeft)
 import Data.Foldable (maximum)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Map (Map, isEmpty)
+import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
 import Data.MediaType (MediaType(..))
 import Data.Newtype (unwrap)
 import Data.Set as Set
+import Data.Tuple (Tuple)
+import Data.Tuple as Tuple
+import Data.Tuple.Nested ((/\))
 import Data.UUID (genUUID)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
-import Effect.Console (log)
 import Halogen (AttrName(..), get, modify_)
 import Halogen as H
 import Halogen.HTML as HH
@@ -27,6 +32,7 @@ import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteDate
+import Promise (then_)
 import Supabase (Client, UserId)
 import Types (BoardGame, GameId, Instructions, PackingStep, SessionInfo, Image)
 import Web.Event.Event (Event, target)
@@ -47,6 +53,31 @@ type State =
   | CoreData
   }
 
+validate :: State -> Array (Tuple String String)
+validate { instructions } =
+  ( catMaybes
+      [ if instructions.description == "" then
+          Just ("description" /\ "A description is required")
+        else Nothing
+      , if null instructions.steps then
+          Just ("steps" /\ "There must be at least one step to the packing instructions")
+        else Nothing
+      ]
+  ) <> (instructions.steps >>= validateStep)
+
+validateStep :: PackingStep -> Array (Tuple String String)
+validateStep { description, image, stepOrdinal } = catMaybes
+  [ if description == "" then
+      Just (("step" <> show stepOrdinal <> ":description") /\ ("Step " <> show stepOrdinal <> " requires a description"))
+    else Nothing
+  , if isNothing image then
+      Just (("step" <> show stepOrdinal <> ":image") /\ ("Step " <> show stepOrdinal <> " requires an image"))
+    else Nothing
+  ]
+
+isValid :: Array (Tuple String String) -> String -> Boolean
+isValid validationErrors field = maybe true (const false) $ find (\(f /\ _) -> field == f) validationErrors
+
 type Input = { | CoreData }
 
 defaultInstructions :: UserId -> GameId -> Instructions
@@ -56,7 +87,7 @@ defaultInstructions userId gameId =
   , creator: userId
   , allowsSleeves: false
   , requiresBaggies: false
-  , steps: [ defaultStep 1 ]
+  , steps: []
   , includedExpansions: Set.empty
   , otherMaterials: ""
   , customInsert: ""
@@ -81,6 +112,7 @@ data Action
   | ToggleBaggies
   | UpdateCustomInsertLink String
   | ImageUploaded PackingStep Event
+  | Save
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -158,25 +190,43 @@ handleAction (ImageUploaded step evt) = do
       pure unit
     Nothing -> do
       pure unit
+handleAction Save = pure unit
 
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
 render state =
-  HH.div [ HP.class_ (H.ClassName "p-8") ]
-    [ HH.div [ HP.class_ (H.ClassName "max-w-4xl mx-auto space-y-6") ]
-        [ HH.header [ HP.class_ (H.ClassName "flex justify-between items-center") ]
-            [ HH.div []
-                [ HH.h1 [ HP.class_ (H.ClassName "text-3xl font-bold text-primary") ]
-                    [ HH.text "Create Repack Guide" ]
-                , HH.p [ HP.class_ (H.ClassName "text-base-content/70") ] [ HH.text "Instructions for organizational perfection." ]
-                ]
-            , HH.button [ HP.class_ (H.ClassName "btn btn-primary px-8"), HP.type_ ButtonSubmit, HP.attr (AttrName "form") "instructions-form" ] [ HH.text "Publish Guide" ]
-            ]
-        , instructionsForm state
-        ]
-    ]
+  let
+    validationErrors = validate state
+  in
+    HH.div [ HP.class_ (H.ClassName "p-8") ]
+      [ HH.div [ HP.class_ (H.ClassName "max-w-4xl mx-auto space-y-6") ]
+          [ HH.header [ HP.class_ (H.ClassName "flex justify-between items-center") ]
+              [ HH.div []
+                  [ HH.h1 [ HP.class_ (H.ClassName "text-3xl font-bold text-primary") ]
+                      [ HH.text "Create Repack Guide" ]
+                  , HH.p [ HP.class_ (H.ClassName "text-base-content/70") ] [ HH.text "Instructions for organizational perfection." ]
+                  ]
+              , HH.button
+                  [ HP.class_ $ classList
+                      [ "btn" /\ true
+                      , "btn-primary" /\ true
+                      , "px-8" /\ true
+                      , "pointer-events-auto" /\ true
+                      , "cursor-not-allowed" /\ not (null validationErrors)
+                      ]
+                  , HP.type_ ButtonSubmit
+                  , HP.attr (AttrName "form") "instructions-form"
+                  , HP.disabled (not $ null validationErrors)
+                  , HP.title $ intercalate "\n" $ Tuple.snd <$> validationErrors
+                  ]
+                  [ HH.text "Publish Guide"
+                  ]
+              ]
+          , instructionsForm validationErrors state
+          ]
+      ]
 
-instructionsForm :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
-instructionsForm state =
+instructionsForm :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> State -> H.ComponentHTML Action slots m
+instructionsForm validationErrors state =
   case state.game of
     Success game ->
       HH.form [ HP.id "instructions-form" ]
@@ -191,7 +241,12 @@ instructionsForm state =
                                 [ HH.span [ HP.class_ (H.ClassName "label-text") ] [ HH.text "Title" ]
                                 ]
                             , HH.input
-                                [ HP.class_ (H.ClassName "input input-bordered w-full")
+                                [ HP.class_ $ classList
+                                    [ "input" /\ true
+                                    , "input-bordered" /\ true
+                                    , "w-full" /\ true
+                                    , "input-error" /\ (not $ isValid validationErrors "description")
+                                    ]
                                 , HP.placeholder "e.g. Scythe Legendary Box Layout"
                                 , HP.required true
                                 , HE.onValueInput UpdateInstructionsDescription
@@ -211,14 +266,14 @@ instructionsForm state =
                 , HH.div [ HP.class_ (H.ClassName "space-y-4") ]
                     [ HH.h2 [ HP.class_ (H.ClassName "text-xl font-bold") ]
                         [ HH.text "Packing Steps" ]
-                    , HH.div [ HP.class_ (H.ClassName "space-y-4") ] $ renderStep <$> state.instructions.steps
+                    , HH.div [ HP.class_ (H.ClassName "space-y-4") ] $ renderStep validationErrors <$> state.instructions.steps
 
                     , HH.button
                         [ HP.class_ (H.ClassName "btn btn-outline btn-block mt-4 border-dashed")
                         , HP.type_ ButtonButton
                         , HE.onClick (\_ -> NewStep)
                         ]
-                        [ HH.text "+ Add Next Step" ]
+                        [ HH.text $ if length state.instructions.steps == 0 then "+ Add First Step" else "+ Add Next Step" ]
                     ]
                 ]
             , HH.aside [ HP.class_ (H.ClassName "space-y-6") ]
@@ -311,12 +366,29 @@ materialsSection state =
 
     ]
 
-renderStep :: forall slots m. MonadAff m => MonadEffect m => PackingStep -> HH.ComponentHTML Action slots m
-renderStep step =
+renderStep :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> PackingStep -> HH.ComponentHTML Action slots m
+renderStep validationErrors step =
   HH.div [ HP.class_ (H.ClassName "step-item card bg-base-200 shadow-sm border border-base-300") ]
     [ HH.div [ HP.class_ (H.ClassName "card-body p-4 flex flex-row gap-4") ]
         [ HH.div [ HP.class_ (H.ClassName "avatar placeholder") ]
-            [ HH.label [ HP.class_ (H.ClassName "bg-neutral text-neutral-content rounded-lg w-24 h-24 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-focus overflow-hidden") ]
+            [ HH.label
+                [ HP.class_ $ classList
+                    [ "bg-neutral" /\ true
+                    , "text-neutral-content" /\ true
+                    , "rounded-lg" /\ true
+                    , "w-24" /\ true
+                    , "h-24" /\ true
+                    , "flex" /\ true
+                    , "flex-col" /\ true
+                    , "items-center" /\ true
+                    , "justify-center" /\ true
+                    , "cursor-pointer" /\ true
+                    , "hover:bg-neutral-focus" /\ true
+                    , "overflow-hidden" /\ true
+                    , "border-error" /\ (not $ isValid validationErrors ("step" <> show step.stepOrdinal <> ":image"))
+                    , "border-1" /\ (not $ isValid validationErrors ("step" <> show step.stepOrdinal <> ":image"))
+                    ]
+                ]
                 [ HH.span [ HP.class_ (H.ClassName "flex flex-col items-center justify-center w-24 h-24") ] [ renderImage step.image ]
                 , HH.input
                     [ HP.required true
@@ -333,7 +405,13 @@ renderStep step =
                     [ HH.text $ "Step " <> (show step.stepOrdinal) ]
                 ]
             , HH.textarea
-                [ HP.class_ (H.ClassName "textarea textarea-bordered w-full h-24")
+                [ HP.class_ $ classList
+                    [ "textarea" /\ true
+                    , "textarea-bordered" /\ true
+                    , "w-full" /\ true
+                    , "h-24" /\ true
+                    , "input-error" /\ (not $ isValid validationErrors $ "step" <> show step.stepOrdinal <> ":description")
+                    ]
                 , HP.required true
                 , HP.placeholder "Describe the component placement..."
                 , HE.onValueInput (UpdateStepDescription step)

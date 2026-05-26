@@ -5,8 +5,7 @@ import Prelude
 import Component.Router as Router
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Effect.Aff (launchAff, launchAff_)
-import Effect.Aff.Class (liftAff)
+import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import FFI.Supabase.Client (createClientWithPasskey)
@@ -17,8 +16,8 @@ import Route (Route(..), routeCodec)
 import Routing.Duplex (parse)
 import Routing.Hash (matchesWith)
 import Supabase (SupabaseAnonKey(..), SupabaseUrl(..), UserId, getUser)
-import Supabase.Auth (UserEmail(..))
-import Supabase.Auth.Types (Timestamp(..))
+import Supabase.Auth (UserEmail)
+import Supabase.Auth.Types (Timestamp)
 import Types (SessionInfo)
 
 mkSessionInfo

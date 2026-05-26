@@ -37,11 +37,18 @@ type BoardGameSummary = { | BoardGameBase }
 type BoardGame =
   { thumbnailUrl :: String
   , imageUrl :: String
-  , expansions :: Array { gameId :: GameId, title :: String }
+  , expansions ::
+      Array
+        { gameId :: GameId
+        , title :: String
+        }
   | BoardGameBase
   }
 
-type Profile = { firstName :: String, lastName :: String }
+type Profile =
+  { firstName :: String
+  , lastName :: String
+  }
 
 type Instructions =
   { description :: String
@@ -53,7 +60,6 @@ type Instructions =
   , steps :: Array PackingStep
   , includedExpansions :: Set GameId
   , otherMaterials :: String
-
   }
 
 type PackingStep =
@@ -62,7 +68,10 @@ type PackingStep =
   , stepOrdinal :: Int
   }
 
-type Image = { imageId :: UUID, imageContent :: String }
+type Image =
+  { imageId :: UUID
+  , imageContent :: String
+  }
 
 type Url = String
 
