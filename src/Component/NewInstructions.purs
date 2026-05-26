@@ -4,6 +4,7 @@ import Prelude
 
 import Bgg (bggThing)
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
+import Data.Array (filter, mapWithIndex, sortWith)
 import Data.Foldable (maximum)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.MediaType (MediaType(..))
@@ -17,9 +18,13 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (ButtonType(..), InputType(..))
 import Halogen.HTML.Properties as HP
+import Halogen.Svg.Attributes (Color(..))
+import Halogen.Svg.Attributes as SP
+import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
+import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
+import Halogen.Svg.Elements as Svg
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteDate
-import Promise (then_)
 import Supabase (Client, UserId)
 import Types (BoardGame, GameId, Instructions, SessionInfo, PackingStep)
 
@@ -47,6 +52,7 @@ defaultInstructions userId gameId =
   , steps: [ defaultStep 1 ]
   , includedExpansions: Set.empty
   , otherMaterials: []
+  , customInsert: Nothing
   }
 
 defaultStep :: Int -> PackingStep
@@ -61,6 +67,8 @@ data Action
   | UpdateInstructionsDescription String
   | NewStep
   | ToggleExpansion GameId
+  | RemoveStep PackingStep
+  | UpdateStepDescription PackingStep String
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -84,7 +92,7 @@ handleAction Initialize = do
 handleAction (UpdateInstructionsDescription str) = modify_ $ \state -> state { instructions = state.instructions { description = str } }
 handleAction NewStep = do
   { instructions } <- get
-  let nextOrdinal = 1 + fromMaybe 1 (maximum (_.stepOrdinal <$> instructions.steps))
+  let nextOrdinal = 1 + fromMaybe 0 (maximum (_.stepOrdinal <$> instructions.steps))
   modify_ $ \state -> state { instructions = state.instructions { steps = state.instructions.steps <> [ defaultStep nextOrdinal ] } }
 handleAction (ToggleExpansion gameId) = do
   { instructions } <- get
@@ -95,10 +103,18 @@ handleAction (ToggleExpansion gameId) = do
       else Set.insert gameId instructions.includedExpansions
 
   modify_ _ { instructions = instructions { includedExpansions = new } }
+handleAction (RemoveStep step) = do
+  { instructions } <- get
+  let filtered = filter (\s -> s /= step) $ sortWith _.stepOrdinal instructions.steps
+  let reordered = mapWithIndex (\i s -> s { stepOrdinal = i + 1 }) filtered
+  modify_ \state -> state { instructions = state.instructions { steps = reordered } }
+handleAction (UpdateStepDescription step str) = do
+  let newStep = step { description = str }
+  modify_ (\state -> state { instructions = state.instructions { steps = map (\s -> if s == step then newStep else s) state.instructions.steps } })
 
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
-render state = HH.div [ HP.class_ (H.ClassName "p-8 min-h-screen") ]
-  [ HH.div [] [ HH.text (show state.instructions) ]
+render state = HH.div [ HP.class_ (H.ClassName "p-8") ]
+  [ HH.div_ [ HH.text (show state.instructions) ]
   , HH.div [ HP.class_ (H.ClassName "max-w-4xl mx-auto space-y-6") ]
       [ HH.header [ HP.class_ (H.ClassName "flex justify-between items-center") ]
           [ HH.div []
@@ -157,7 +173,35 @@ instructionsForm state =
                       [ HH.text "+ Add Next Step" ]
                   ]
               ]
-          , HH.aside [ HP.class_ (H.ClassName "space-y-6") ] [ HH.text "Sidebar" ]
+          , HH.aside [ HP.class_ (H.ClassName "space-y-6") ]
+              [ --materialsSection
+                HH.div [ HP.class_ (H.ClassName "alert alert-info shadow-sm") ]
+                  [ Svg.svg
+                      [ SP.class_ (H.ClassName "stroke-current w-6 h-6")
+                      , SP.fill NoColor
+                      , SP.viewBox 0.0 0.0 24.0 24.0
+                      ]
+                      [ Svg.path
+                          [ SP.strokeLineCap LineCapRound
+                          , SP.strokeLineJoin LineJoinRound
+                          , SP.strokeWidth 2.0
+                          , SP.d
+                              [ SP.m SP.Abs 13.0 16.0
+                              , SP.h SP.Rel (-1.0)
+                              , SP.v SP.Rel (-4.0)
+                              , SP.h SP.Rel (-1.0)
+                              , SP.m SP.Rel 1.0 (-4.0)
+                              , SP.h SP.Rel 0.01
+                              , SP.m SP.Abs 21.0 12.0
+                              , SP.a SP.Rel 9.0 9.0 0.0 SP.Arc1 SP.Sweep1 (-18.0) 0.0
+                              , SP.a SP.Rel 9.0 9.0 0.0 SP.Arc0 SP.Sweep1 18.0 0.0
+                              , SP.z
+                              ]
+                          ]
+                      ]
+                  , HH.span_ [ HH.text "Pack items in the order you'd use them during setup!" ]
+                  ]
+              ]
           ]
       ]
     _ -> HH.form [] []
@@ -180,9 +224,16 @@ renderStep step = HH.div [ HP.class_ (H.ClassName "step-item card bg-base-200 sh
               [ HP.class_ (H.ClassName "textarea textarea-bordered w-full h-24")
               , HP.required true
               , HP.placeholder "Describe the component placement..."
+              , HE.onValueInput (UpdateStepDescription step)
+              , HP.value step.description
               ]
           ]
-      , HH.button [ HP.class_ (H.ClassName "btn btn-ghost btn-sm text-error"), HP.type_ ButtonButton ] [ HH.text "✕" ]
+      , HH.button
+          [ HE.onClick (\_ -> RemoveStep step)
+          , HP.class_ (H.ClassName "btn btn-ghost btn-sm text-error")
+          , HP.type_ ButtonButton
+          ]
+          [ HH.text "✕" ]
       ]
   ]
 

@@ -52,9 +52,10 @@ type Instructions =
   , creator :: UserId
   , allowsSleeves :: Boolean
   , requiresBaggies :: Boolean
+  , customInsert :: Maybe Url
   , steps :: Array PackingStep
   , includedExpansions :: Set GameId
-  , otherMaterials :: Array OtherMaterials
+  , otherMaterials :: Array String
   }
 
 type PackingStep =
@@ -65,18 +66,3 @@ type PackingStep =
 
 type Url = String
 
-data OtherMaterials
-  = CustomInsert Url
-  | CustomBox Url
-  | OtherMaterials String
-
-derive instance Generic OtherMaterials _
-
-instance Show OtherMaterials where
-  show = genericShow
-
-instance WriteForeign OtherMaterials where
-  writeImpl = genericWriteForeignTaggedSum TaggedSum.defaultOptions
-
-instance ReadForeign OtherMaterials where
-  readImpl = genericReadForeignTaggedSum TaggedSum.defaultOptions
