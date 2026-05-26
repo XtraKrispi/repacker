@@ -10,9 +10,6 @@ import Data.Show.Generic (genericShow)
 import Data.UUID (UUID)
 import Supabase.Auth (UserEmail)
 import Supabase.Auth.Types (UserId)
-import Yoga.JSON (class ReadForeign, class WriteForeign)
-import Yoga.JSON.Generics (genericReadForeignTaggedSum, genericWriteForeignTaggedSum)
-import Yoga.JSON.Generics.TaggedSumRep as TaggedSum
 
 newtype GameId = GameId String
 
@@ -52,17 +49,20 @@ type Instructions =
   , creator :: UserId
   , allowsSleeves :: Boolean
   , requiresBaggies :: Boolean
-  , customInsert :: Maybe Url
+  , customInsert :: Url
   , steps :: Array PackingStep
   , includedExpansions :: Set GameId
-  , otherMaterials :: Array String
+  , otherMaterials :: String
+
   }
 
 type PackingStep =
   { description :: String
-  , imageId :: Maybe UUID
+  , image :: Maybe Image
   , stepOrdinal :: Int
   }
+
+type Image = { imageId :: UUID, imageContent :: String }
 
 type Url = String
 

@@ -21,8 +21,8 @@ type DbInstructionsRow =
   , allows_sleeves :: Boolean
   , requires_baggies :: Boolean
   , included_expansions :: Array String
-  , other_materials :: Array String
-  , custom_insert_url :: Maybe String
+  , other_materials :: String
+  , custom_insert_url :: String
   )
 
 type DbInstructionsRelations = (steps :: Rel DbStepsRow ())

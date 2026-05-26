@@ -9,6 +9,7 @@
             "affjax-web",
             "console",
             "debug",
+            "dom-filereader",
             "effect",
             "halogen",
             "halogen-store",
@@ -19,6 +20,7 @@
             "routing-duplex",
             "supabase",
             "transformers",
+            "uuid",
             "web-dom",
             "yoga-json"
           ]
@@ -934,6 +936,24 @@
         "safe-coerce",
         "strings",
         "tuples"
+      ]
+    },
+    "dom-filereader": {
+      "type": "registry",
+      "version": "7.0.0",
+      "integrity": "sha256-9otyGaKe2a+onjQUUeOuYXEjWsC8cgEYvlo0DdH/RPM=",
+      "dependencies": [
+        "aff",
+        "arraybuffer-types",
+        "effect",
+        "either",
+        "exceptions",
+        "foreign",
+        "prelude",
+        "transformers",
+        "web-events",
+        "web-file",
+        "web-html"
       ]
     },
     "dom-indexed": {

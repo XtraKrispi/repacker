@@ -5,6 +5,7 @@ package:
     - affjax-web
     - console
     - debug
+    - dom-filereader
     - effect
     - halogen
     - halogen-store
@@ -15,6 +16,7 @@ package:
     - routing-duplex
     - supabase
     - transformers
+    - uuid
     - web-dom
     - yoga-json
   test:
