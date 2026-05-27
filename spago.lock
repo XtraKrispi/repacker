@@ -11,6 +11,7 @@
             "debug",
             "dom-filereader",
             "effect",
+            "filterable",
             "halogen",
             "halogen-store",
             "halogen-svg-elems",
@@ -1065,6 +1066,25 @@
         "typelevel-prelude",
         "web-file",
         "web-streams"
+      ]
+    },
+    "filterable": {
+      "type": "registry",
+      "version": "5.0.0",
+      "integrity": "sha256-be7ci1Bzwud2waqoCtNGsTBZbt7fi+gCLvGddQQRJ3A=",
+      "dependencies": [
+        "arrays",
+        "control",
+        "either",
+        "foldable-traversable",
+        "identity",
+        "lists",
+        "maybe",
+        "newtype",
+        "ordered-collections",
+        "prelude",
+        "st",
+        "tuples"
       ]
     },
     "foldable-traversable": {

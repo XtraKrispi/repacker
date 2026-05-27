@@ -7,6 +7,7 @@ package:
     - debug
     - dom-filereader
     - effect
+    - filterable
     - halogen
     - halogen-store
     - halogen-svg-elems

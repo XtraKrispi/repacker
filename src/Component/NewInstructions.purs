@@ -6,17 +6,18 @@ import Bgg (bggThing)
 import Component.Helpers (classList)
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
 import Data.Array (catMaybes, filter, find, intercalate, length, mapWithIndex, null, sortWith)
-import Data.Either (Either(..), fromLeft)
-import Data.Foldable (maximum)
-import Data.Map (Map, isEmpty)
+import Data.Foldable (lookup, maximum)
+import Data.Map (Map, empty)
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
 import Data.MediaType (MediaType(..))
-import Data.Newtype (unwrap)
+import Data.Newtype (unwrap, wrap)
 import Data.Set as Set
 import Data.Tuple (Tuple)
 import Data.Tuple as Tuple
 import Data.Tuple.Nested ((/\))
-import Data.UUID (genUUID)
+import Data.UUID (emptyUUID, genUUID)
+import Database.Instructions as Database
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Halogen (AttrName(..), get, modify_)
@@ -31,12 +32,11 @@ import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
 import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Network.RemoteData (RemoteData(..))
-import Network.RemoteData as RemoteDate
-import Promise (then_)
-import Supabase (Client, UserId)
-import Types (BoardGame, GameId, Instructions, PackingStep, SessionInfo, Image)
-import Web.Event.Event (Event, target)
-import Web.File.File (toBlob)
+import Network.RemoteData as RemoteData
+import Supabase (Client)
+import Types (BoardGame, GameId, ImageKey, Instructions, InstructionsKey, Key, PackingStep, SessionInfo)
+import Web.Event.Event (Event, preventDefault, target)
+import Web.File.File (File, toBlob)
 import Web.File.FileList (item)
 import Web.File.FileReader.Aff as FRA
 import Web.HTML.HTMLInputElement (files, fromEventTarget)
@@ -50,6 +50,8 @@ type CoreData =
 type State =
   { game :: RemoteData String BoardGame
   , instructions :: Instructions
+  , instructionsKey :: InstructionsKey
+  , images :: Map (Key ImageKey) (Tuple File String)
   | CoreData
   }
 
@@ -80,15 +82,13 @@ isValid validationErrors field = maybe true (const false) $ find (\(f /\ _) -> f
 
 type Input = { | CoreData }
 
-defaultInstructions :: UserId -> GameId -> Instructions
-defaultInstructions userId gameId =
+defaultInstructions :: Instructions
+defaultInstructions =
   { description: ""
-  , bggId: gameId
-  , creator: userId
   , allowsSleeves: false
   , requiresBaggies: false
   , steps: []
-  , includedExpansions: Set.empty
+  , includedExpansions: wrap Set.empty
   , otherMaterials: ""
   , customInsert: ""
   }
@@ -112,7 +112,7 @@ data Action
   | ToggleBaggies
   | UpdateCustomInsertLink String
   | ImageUploaded PackingStep Event
-  | Save
+  | Save Event
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -125,14 +125,26 @@ component = H.mkComponent
   }
 
 initialState :: Input -> State
-initialState { client, gameId, sessionInfo } = { client, gameId, sessionInfo, game: NotAsked, instructions: defaultInstructions sessionInfo.userId gameId }
+initialState { client, gameId, sessionInfo } =
+  { client
+  , gameId
+  , sessionInfo
+  , game: NotAsked
+  , instructions: defaultInstructions
+  , instructionsKey: wrap emptyUUID
+  , images: empty
+  }
 
 handleAction :: forall slots output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
   { gameId } <- get
-  modify_ _ { game = Loading }
+  newKey <- wrap <$> liftEffect genUUID
+  modify_ \state -> state
+    { game = Loading
+    , instructionsKey = newKey
+    }
   eThing <- liftAff $ bggThing gameId
-  modify_ _ { game = RemoteDate.fromEither eThing }
+  modify_ _ { game = RemoteData.fromEither eThing }
 handleAction (UpdateInstructionsDescription str) = modify_ $ \state -> state { instructions = state.instructions { description = str } }
 handleAction NewStep = do
   { instructions } <- get
@@ -142,16 +154,22 @@ handleAction (ToggleExpansion gameId) = do
   { instructions } <- get
   let
     new =
-      if Set.member gameId instructions.includedExpansions then
-        Set.delete gameId instructions.includedExpansions
-      else Set.insert gameId instructions.includedExpansions
+      wrap $
+        if Set.member gameId (unwrap instructions.includedExpansions) then
+          Set.delete gameId (unwrap instructions.includedExpansions)
+        else Set.insert gameId (unwrap instructions.includedExpansions)
 
   modify_ _ { instructions = instructions { includedExpansions = new } }
 handleAction (RemoveStep step) = do
-  { instructions } <- get
+  { instructions, images } <- get
+  let
+    newImages =
+      case find (_ == step) instructions.steps >>= _.image of
+        Just imageId -> Map.delete imageId images
+        Nothing -> images
   let filtered = filter (\s -> s /= step) $ sortWith _.stepOrdinal instructions.steps
   let reordered = mapWithIndex (\i s -> s { stepOrdinal = i + 1 }) filtered
-  modify_ \state -> state { instructions = state.instructions { steps = reordered } }
+  modify_ \state -> state { instructions = state.instructions { steps = reordered }, images = newImages }
 handleAction (UpdateStepDescription step str) = do
   modify_ (\state -> state { instructions = state.instructions { steps = map (\s -> if s == step then step { description = str } else s) state.instructions.steps } })
 handleAction (UpdateOtherMaterials str) =
@@ -172,25 +190,33 @@ handleAction (ImageUploaded step evt) = do
           case item 0 files of
             Just file -> do
               let blob = toBlob file
-              imageId <- liftEffect genUUID
+              imageId <- wrap <$> liftEffect genUUID
               imageContent <- liftAff $ FRA.readAsDataURL blob
               modify_ \state -> state
                 { instructions = state.instructions
                     { steps = map
                         ( \s ->
                             if s == step then
-                              s { image = Just { imageId, imageContent } }
+                              s { image = Just imageId }
                             else s
                         )
                         state.instructions.steps
                     }
+                , images = Map.insertWith (\_ n -> n) imageId (file /\ imageContent) state.images
                 }
             Nothing -> pure unit
         Nothing -> pure unit
       pure unit
     Nothing -> do
       pure unit
-handleAction Save = pure unit
+handleAction (Save evt) = do
+  liftEffect $ preventDefault evt
+  state <- get
+  if null (validate state) then do
+    results <- liftAff $ Database.newInstructions state.client state.gameId state.instructionsKey state.instructions ((\(k /\ (f /\ _)) -> k /\ f) <$> Map.toUnfoldable state.images)
+    pure unit
+  else
+    pure unit
 
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
 render state =
@@ -229,7 +255,7 @@ instructionsForm :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple 
 instructionsForm validationErrors state =
   case state.game of
     Success game ->
-      HH.form [ HP.id "instructions-form" ]
+      HH.form [ HP.id "instructions-form", HE.onSubmit Save ]
         [ HH.div [ HP.class_ (H.ClassName "grid grid-cols-1 md:grid-cols-3 gap-6") ]
             [ HH.main [ HP.class_ (H.ClassName "md:col-span-2 space-y-6") ]
                 [ HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
@@ -266,7 +292,7 @@ instructionsForm validationErrors state =
                 , HH.div [ HP.class_ (H.ClassName "space-y-4") ]
                     [ HH.h2 [ HP.class_ (H.ClassName "text-xl font-bold") ]
                         [ HH.text "Packing Steps" ]
-                    , HH.div [ HP.class_ (H.ClassName "space-y-4") ] $ renderStep validationErrors <$> state.instructions.steps
+                    , HH.div [ HP.class_ (H.ClassName "space-y-4") ] $ renderStep validationErrors state.images <$> state.instructions.steps
 
                     , HH.button
                         [ HP.class_ (H.ClassName "btn btn-outline btn-block mt-4 border-dashed")
@@ -366,8 +392,8 @@ materialsSection state =
 
     ]
 
-renderStep :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> PackingStep -> HH.ComponentHTML Action slots m
-renderStep validationErrors step =
+renderStep :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> Map (Key ImageKey) (Tuple File String) -> PackingStep -> HH.ComponentHTML Action slots m
+renderStep validationErrors images step =
   HH.div [ HP.class_ (H.ClassName "step-item card bg-base-200 shadow-sm border border-base-300") ]
     [ HH.div [ HP.class_ (H.ClassName "card-body p-4 flex flex-row gap-4") ]
         [ HH.div [ HP.class_ (H.ClassName "avatar placeholder") ]
@@ -389,7 +415,7 @@ renderStep validationErrors step =
                     , "border-1" /\ (not $ isValid validationErrors ("step" <> show step.stepOrdinal <> ":image"))
                     ]
                 ]
-                [ HH.span [ HP.class_ (H.ClassName "flex flex-col items-center justify-center w-24 h-24") ] [ renderImage step.image ]
+                [ HH.span [ HP.class_ (H.ClassName "flex flex-col items-center justify-center w-24 h-24") ] [ renderImage (step.image >>= (\image -> Map.lookup image images)) ]
                 , HH.input
                     [ HP.required true
                     , HP.type_ InputFile
@@ -427,11 +453,11 @@ renderStep validationErrors step =
         ]
     ]
 
-renderImage :: forall slots m. MonadAff m => MonadEffect m => Maybe Image -> HH.ComponentHTML Action slots m
+renderImage :: forall slots m. MonadAff m => MonadEffect m => Maybe (Tuple File String) -> HH.ComponentHTML Action slots m
 renderImage Nothing =
   HH.span [ HP.class_ (H.ClassName "text-[10px] uppercase font-bold") ]
     [ HH.text "Add Photo" ]
-renderImage (Just { imageContent }) = HH.img [ HP.src imageContent ]
+renderImage (Just (_ /\ imageContent)) = HH.img [ HP.src imageContent ]
 
 {-
 
