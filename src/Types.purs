@@ -85,11 +85,13 @@ type Instructions =
 
 type PackingStep =
   { description :: String
-  , image :: Maybe (Key ImageKey)
+  , image :: Maybe ImageKey
   , stepOrdinal :: Int
   }
 
-data ImageKey
+type ImageKey = Key Image
+
+data Image
 
 type Url = String
 

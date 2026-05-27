@@ -56,9 +56,9 @@ fetchInstructions client gameId = do
    - Upload files to storage for each step -> filename is the uuid
 -}
 
-data InstructionsSaveError = FailedToSave String | ImagesFailedToUpload (Array (Tuple (Key ImageKey) String))
+data InstructionsSaveError = FailedToSave String | ImagesFailedToUpload (Array (Tuple ImageKey String))
 
-newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Array (Tuple (Key ImageKey) File) -> Aff (Either InstructionsSaveError Unit)
+newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Array (Tuple ImageKey File) -> Aff (Either InstructionsSaveError Unit)
 newInstructions client gameId instructionsKey instructions images = do
   results <- client # from instructionsTable # insert (toDbInstructions gameId instructionsKey instructions) # run
   case results.error of
@@ -71,7 +71,7 @@ newInstructions client gameId instructionsKey instructions images = do
         pure $ Left $ ImagesFailedToUpload errors
     Just err -> pure $ Left $ FailedToSave err.message
 
-uploadStepImage :: Client -> Tuple (Key ImageKey) File -> Aff (Tuple (Key ImageKey) (Response { path :: String }))
+uploadStepImage :: Client -> Tuple ImageKey File -> Aff (Tuple ImageKey (Response { path :: String }))
 uploadStepImage client (imageKey /\ file) = (\d -> imageKey /\ d) <$> upload (StoragePath (toString (unwrap imageKey) <> extension file)) file { upsert: true } (fromStorage (BucketName "images") client)
 
 extension :: File -> String

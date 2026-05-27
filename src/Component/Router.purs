@@ -82,7 +82,7 @@ render state = HH.div []
           GameR gameId -> HH.slot_ _page ("game " <> (unwrap gameId)) Game.component { gameId: gameId, client: state.client, session: state.session }
           ProfileR userId -> HH.slot_ _page ("profile " <> (UUID.toString $ unwrap (unwrap userId))) Profile.component { client: state.client, userId, isReadOnly: Just userId /= (_.userId <$> state.session) }
           NewInstructionsR gameId -> case state.session of
-            Just s -> HH.slot_ _page ("new-instructions " <> unwrap gameId) NewInstructions.component { client: state.client, gameId, sessionInfo: s }
+            Just s -> HH.slot_ _page ("new-instructions " <> unwrap gameId) NewInstructions.component { client: state.client, gameId, sessionInfo: s, existingKey: Nothing }
             Nothing ->
               -- TODO: Do something here
               HH.div [] []
