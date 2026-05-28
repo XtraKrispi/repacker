@@ -2,8 +2,9 @@ module Component.Profile where
 
 import Prelude
 
-import Data.Either (either)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Either (Either(..), either)
+import Data.Maybe (Maybe(..), maybe)
+import Data.UUID (genUUID)
 import Database.Profile (fetchProfile, saveProfile)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -13,13 +14,14 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (InputType(..))
 import Halogen.HTML.Properties as HP
+import Halogen.Store.Monad (class MonadStore, updateStore)
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteData
+import Store as S
 import Supabase (Client)
 import Supabase.Auth.Types (UserId)
-import Types (Profile)
+import Types (Key(..), Profile)
 import Web.Event.Event (Event, preventDefault)
-import Web.UIEvent.MouseEvent (MouseEvent)
 
 type CoreData =
   ( client :: Client
@@ -44,7 +46,7 @@ data Action
   | UpdateLastName String
   | SaveProfile Event
 
-component :: forall query output m. MonadAff m => MonadEffect m => H.Component query Input output m
+component :: forall query output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => H.Component query Input output m
 component = H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval
@@ -64,7 +66,7 @@ initialState { client, userId, isReadOnly } =
   , lastName: ""
   }
 
-handleAction :: forall slots output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action slots output m Unit
+handleAction :: forall slots output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
   { userId, client } <- get
   modify_ _ { profile = Loading }
@@ -80,7 +82,10 @@ handleAction (SaveProfile event) = do
   liftEffect $ preventDefault event
   { userId, client, firstName, lastName } <- get
   results <- liftAff $ saveProfile client userId { firstName, lastName }
-  pure unit
+  toastKey <- Key <$> liftEffect genUUID
+  case results of
+    Right _ -> updateStore $ S.AddToast { message: "Your profile has been updated.", key: toastKey, severity: S.Success }
+    Left _err -> updateStore $ S.AddToast { message: "There was an issue saving your profile, please try again.", key: toastKey, severity: S.Error }
 
 render :: forall slots m. State -> H.ComponentHTML Action slots m
 render state = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
@@ -91,7 +96,7 @@ render state = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
       [ case state.profile of
           NotAsked -> HH.text ""
           Loading -> HH.text "Loading"
-          Success p | not state.isReadOnly -> HH.form [ HE.onSubmit SaveProfile ]
+          Success _p | not state.isReadOnly -> HH.form [ HE.onSubmit SaveProfile ]
             [ HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
                 [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "First Name" ]
                 , HH.input
@@ -115,7 +120,7 @@ render state = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
             , HH.button [ HP.class_ (H.ClassName "btn btn-primary") ]
                 [ HH.text "Save" ]
             ]
-          Success p | otherwise -> HH.div [] []
-          Failure err -> HH.text ""
+          Success _p | otherwise -> HH.div [] [ HH.text "UPDATE ME FOR READ ONLY" ]
+          Failure _err -> HH.text "UPDATE ME FOR FAILURE"
       ]
   ]

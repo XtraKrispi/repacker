@@ -55,7 +55,7 @@ handleAction (Receive { context }) = do
   { toasts } <- get
   let newToasts = context \\ toasts
   modify_ _ { toasts = context }
-  liftAff $ Aff.delay (Milliseconds 1000.0)
+  liftAff $ Aff.delay (Milliseconds 3000.0)
   traverse_ (\t -> updateStore (S.RemoveToast t.key)) newToasts
 
 render

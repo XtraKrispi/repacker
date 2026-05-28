@@ -6,6 +6,7 @@ import Bgg (bggThing)
 import Component.Helpers (classList)
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
 import Data.Array (catMaybes, filter, find, intercalate, length, mapWithIndex, null, sortWith)
+import Data.Either (Either(..))
 import Data.Foldable (maximum)
 import Data.Map (Map, empty)
 import Data.Map as Map
@@ -26,6 +27,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (ButtonType(..), InputType(..))
 import Halogen.HTML.Properties as HP
+import Halogen.Store.Monad (class MonadStore, updateStore)
 import Halogen.Svg.Attributes (Color(..))
 import Halogen.Svg.Attributes as SP
 import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
@@ -33,6 +35,8 @@ import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteData
+import Route (Route(..), navigate)
+import Store as S
 import Supabase (Client)
 import Types (BoardGame, GameId, ImageKey, Instructions, InstructionsKey, PackingStep, SessionInfo)
 import Web.Event.Event (Event, preventDefault, target)
@@ -120,7 +124,7 @@ data Action
   | ImageUploaded PackingStep Event
   | Save Event
 
-component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
+component :: forall query output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => H.Component query Input output m
 component = H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval
@@ -143,7 +147,7 @@ initialState { client, gameId, sessionInfo, existingKey } =
   , images: empty
   }
 
-handleAction :: forall slots output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action slots output m Unit
+handleAction :: forall slots output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
   -- TODO: Deal with fetching data here
   { gameId } <- get
@@ -256,7 +260,7 @@ handleAction (Save evt) = do
   state <- get
   if null (validate state) then do
     case state.existingKey of
-      Just key -> do
+      Just _key -> do
         -- TODO: Deal with updating stuff here
         pure unit
       Nothing -> do
@@ -264,7 +268,22 @@ handleAction (Save evt) = do
           Success instructions -> do
             newKey <- wrap <$> liftEffect genUUID
             results <- liftAff $ Database.newInstructions state.client state.gameId newKey instructions ((\(k /\ (f /\ _)) -> k /\ f) <$> Map.toUnfoldable state.images)
-            pure unit
+            toastKey <- wrap <$> liftEffect genUUID
+            case results of
+              Right _ -> do
+                updateStore $ S.AddToast
+                  { message: "Instructions have been saved."
+                  , severity: S.Success
+                  , key: toastKey
+                  }
+                navigate $ UpdateInstructionsR state.gameId newKey
+              Left _err -> do
+                updateStore $ S.AddToast
+                  { message: "There was a problem saving the instructions, please try again."
+                  , severity: S.Error
+                  , key: toastKey
+                  }
+
           _ -> pure unit
   else
     pure unit
