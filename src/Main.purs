@@ -11,10 +11,12 @@ import Effect.Class.Console (log)
 import FFI.Supabase.Client (createClientWithPasskey)
 import Foreign (Foreign)
 import Halogen.Aff (awaitBody, runHalogenAff)
+import Halogen.Store.Monad (runStoreT)
 import Halogen.VDom.Driver (runUI)
 import Route (Route(..), routeCodec)
 import Routing.Duplex (parse)
 import Routing.Hash (matchesWith)
+import Store as S
 import Supabase (SupabaseAnonKey(..), SupabaseUrl(..), UserId, getUser)
 import Supabase.Auth (UserEmail)
 import Supabase.Auth.Types (Timestamp)
@@ -44,9 +46,9 @@ main = do
   client <- createClientWithPasskey (SupabaseUrl "https://jruvwolatohqkqxcujjc.supabase.co") (SupabaseAnonKey "sb_publishable_8O5gqGJwgpMdY20XcYoz-Q_vMYzThpZ")
   runHalogenAff do
     session <- mkSessionInfo <$> getUser client
-    log (show session)
     body <- awaitBody
-    io <- runUI Router.component { initialRoute: HomeR, client, session } body
+    root <- runStoreT S.initialStore S.reduce Router.component
+    io <- runUI root { initialRoute: HomeR, client, session } body
     void $ liftEffect $ matchesWith (parse routeCodec)
       ( \mOld mnew ->
           when (mOld /= Just mnew) $ do

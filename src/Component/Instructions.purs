@@ -41,6 +41,8 @@ import Web.File.FileList (item)
 import Web.File.FileReader.Aff as FRA
 import Web.HTML.HTMLInputElement (files, fromEventTarget)
 
+-- TODO : Add feedback... global solution
+
 type CoreData =
   ( client :: Client
   , gameId :: GameId

@@ -18,7 +18,12 @@ import Halogen (modify_)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
+import Halogen.Store.Connect (Connected, connect)
+import Halogen.Store.Monad (class MonadStore)
+import Halogen.Store.Select (selectAll)
 import Route (Route(..))
+import Store (Toast)
+import Store as S
 import Supabase (Client)
 import Type.Proxy (Proxy(..))
 import Types (SessionInfo)
@@ -41,27 +46,35 @@ type State =
   { currentRoute :: Route
   , session :: Maybe SessionInfo
   , client :: Client
+  , toasts :: Array Toast
   }
 
 data Query a = ChangeRoute Route a
 
-data Action = NavbarOutput Navbar.Output
+data Action = NavbarOutput Navbar.Output | Receive (Connected S.Store Input)
 
-component :: forall output m. MonadAff m => MonadEffect m => H.Component Query Input output m
-component = H.mkComponent
+component
+  :: forall output m
+   . MonadAff m
+  => MonadEffect m
+  => MonadStore S.Action S.Store m
+  => H.Component Query Input output m
+component = connect selectAll $ H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval
       { handleQuery = handleQuery
       , handleAction = handleAction
+      , receive = Just <<< Receive
       }
   , render
   }
 
-initialState :: Input -> State
-initialState { initialRoute, client, session } =
+initialState :: Connected S.Store Input -> State
+initialState { context, input: { initialRoute, client, session } } =
   { currentRoute: initialRoute
   , session
   , client
+  , toasts: context.toasts
   }
 
 handleQuery :: forall a action output m. MonadAff m => MonadEffect m => Query a -> H.HalogenM State action Slots output m (Maybe a)
@@ -73,8 +86,10 @@ handleQuery (ChangeRoute route a) = do
 handleAction :: forall output m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction (NavbarOutput Navbar.UserLoggedOut) =
   modify_ _ { session = Nothing }
+handleAction (Receive { context }) =
+  modify_ _ { toasts = context.toasts }
 
-render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
+render :: forall m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => State -> H.ComponentHTML Action Slots m
 render state = HH.div []
   [ HH.slot _navbar 0 Navbar.component { currentRoute: state.currentRoute, client: state.client, session: state.session } NavbarOutput
   , HH.div [ HP.class_ (H.ClassName "px-32 pt-4") ]
@@ -90,5 +105,19 @@ render state = HH.div []
               Just s -> HH.slot_ _page ("update-instructions " <> unwrap gameId <> (toString (unwrap instructionsKey))) Instructions.component { client: state.client, gameId, sessionInfo: s, existingKey: Just instructionsKey }
               Nothing -> HH.div [] []
       ]
+  , HH.div [ HP.class_ (H.ClassName "toast toast-center") ] (map renderToast state.toasts)
+
+  {-
+  <div class="toast toast-center">
+  <div class="alert alert-info">
+    <span>New mail arrived.</span>
+  </div>
+  <div class="alert alert-success">
+    <span>Message sent successfully.</span>
+  </div>
+</div>
+  -}
   ]
 
+renderToast :: forall m. Toast -> H.ComponentHTML Action Slots m
+renderToast { message } = HH.div [ HP.class_ (H.ClassName "alert alert-info") ] [ HH.span_ [ HH.text message ] ]
