@@ -4,15 +4,12 @@ import Prelude
 
 import Component.GameSearch (Size(..))
 import Component.GameSearch as GameSearch
-import Data.Newtype (wrap)
-import Data.UUID (genUUID)
 import Effect.Aff.Class (class MonadAff)
-import Effect.Class (class MonadEffect, liftEffect)
+import Effect.Class (class MonadEffect)
 import Halogen as H
 import Halogen.HTML as HH
-import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
-import Halogen.Store.Monad (class MonadStore, updateStore)
+import Halogen.Store.Monad (class MonadStore)
 import Route (Route(..), navigate)
 import Store as S
 import Type.Proxy (Proxy(..))
@@ -22,7 +19,7 @@ _search = Proxy :: Proxy "search"
 
 type State = {}
 
-data Action = GameSearchOutput GameSearch.Output | Test
+data Action = GameSearchOutput GameSearch.Output
 
 component :: forall query input output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => H.Component query input output m
 component = H.mkComponent
@@ -34,12 +31,8 @@ component = H.mkComponent
 initialState :: forall input. input -> State
 initialState _ = {}
 
-handleAction :: forall output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action Slots output m Unit
+handleAction :: forall output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction (GameSearchOutput (GameSearch.GameSelected bg)) = navigate (GameR bg.bggId)
-handleAction Test = do
-  key <- wrap <$> liftEffect genUUID
-  updateStore $ S.AddToast { message: "Hello", key }
-  pure unit
 
 render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render _ = HH.div [ HP.class_ (H.ClassName "pt-24 flex flex-col gap-6") ]
@@ -51,7 +44,7 @@ render _ = HH.div [ HP.class_ (H.ClassName "pt-24 flex flex-col gap-6") ]
               , HH.p_ [ HH.text "Find and share visual guides on how to repack the game effectively and efficiently." ]
               ]
           , HH.div [ HP.class_ (H.ClassName "flex gap-2 items-center") ]
-              [ HH.button [ HP.class_ (H.ClassName "btn btn-secondary"), HE.onClick (\_ -> Test) ]
+              [ HH.button [ HP.class_ (H.ClassName "btn btn-secondary") ]
                   [ HH.text "Get Started" ]
               ]
           ]
