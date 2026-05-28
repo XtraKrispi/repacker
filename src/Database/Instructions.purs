@@ -17,12 +17,12 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple)
 import Data.Tuple.Nested ((/\))
 import Data.UUID (toString)
-import Effect.Aff (Aff)
-import Supabase (Client, Response, StoragePath(..), Table, eq_, from, fromStorage, insert, mkTable, run, select, upload)
+import Effect.Aff (Aff, catchError)
+import Supabase (Client, StoragePath(..), Table, eq_, from, fromStorage, insert, mkTable, run, select, upload)
 import Supabase.Auth.Types (UserId)
 import Supabase.Types (BucketName(..))
 import Supabase.UUID (UUID)
-import Types (GameId, ImageKey, Instructions, InstructionsKey, Key)
+import Types (GameId, ImageKey, Instructions, InstructionsKey)
 import Web.File.File (File)
 import Web.File.File as File
 
@@ -51,11 +51,6 @@ fetchInstructions client gameId = do
     # run
   pure $ catMaybes $ toInstructions <$> fromMaybe [] results.data
 
-{- Workflow:
-   - Create the instructions entry
-   - Upload files to storage for each step -> filename is the uuid
--}
-
 data InstructionsSaveError = FailedToSave String | ImagesFailedToUpload (Array (Tuple ImageKey String))
 
 newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Array (Tuple ImageKey File) -> Aff (Either InstructionsSaveError Unit)
@@ -63,16 +58,34 @@ newInstructions client gameId instructionsKey instructions images = do
   results <- client # from instructionsTable # insert (toDbInstructions gameId instructionsKey instructions) # run
   case results.error of
     Nothing -> do
-      responses <- traverse (uploadStepImage client) $ images
-      let errors = filterMap (\(k /\ resp) -> (\err -> k /\ err.message) <$> resp.error) responses
+      responses <- traverse (uploadStepImage client instructionsKey) $ images
+      let errors = filterMap (\(k /\ err) -> (k /\ _) <$> err) responses
       if null errors then
         pure $ Right unit
       else
         pure $ Left $ ImagesFailedToUpload errors
     Just err -> pure $ Left $ FailedToSave err.message
 
-uploadStepImage :: Client -> Tuple ImageKey File -> Aff (Tuple ImageKey (Response { path :: String }))
-uploadStepImage client (imageKey /\ file) = (\d -> imageKey /\ d) <$> upload (StoragePath (toString (unwrap imageKey) <> extension file)) file { upsert: true } (fromStorage (BucketName "images") client)
+uploadStepImage :: Client -> InstructionsKey -> Tuple ImageKey File -> Aff (Tuple ImageKey (Maybe String))
+uploadStepImage client instructionsKey (imageKey /\ file) = do
+  catchError
+    ( (\d -> imageKey /\ (_.message <$> d.error))
+        <$> upload
+          ( StoragePath
+              ( toString (unwrap instructionsKey)
+                  <> "/"
+                  <> toString (unwrap imageKey)
+                  <> extension file
+              )
+          )
+          file
+          { upsert: true }
+          (fromStorage (BucketName "images") client)
+
+    )
+    -- TODO: There is a bug where the response from supabase doesn't match what's expected
+    -- We'll suppress the errors for now
+    (\_err -> pure $ imageKey /\ Nothing)
 
 extension :: File -> String
 extension file = case File.type_ file of

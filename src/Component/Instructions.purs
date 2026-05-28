@@ -1,4 +1,4 @@
-module Component.NewInstructions where
+module Component.Instructions where
 
 import Prelude
 
@@ -6,7 +6,7 @@ import Bgg (bggThing)
 import Component.Helpers (classList)
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
 import Data.Array (catMaybes, filter, find, intercalate, length, mapWithIndex, null, sortWith)
-import Data.Foldable (lookup, maximum)
+import Data.Foldable (maximum)
 import Data.Map (Map, empty)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
@@ -16,7 +16,7 @@ import Data.Set as Set
 import Data.Tuple (Tuple)
 import Data.Tuple as Tuple
 import Data.Tuple.Nested ((/\))
-import Data.UUID (emptyUUID, genUUID)
+import Data.UUID (genUUID)
 import Database.Instructions as Database
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -31,10 +31,10 @@ import Halogen.Svg.Attributes as SP
 import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
 import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
-import Network.RemoteData (RemoteData(..), withDefault)
+import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteData
 import Supabase (Client)
-import Types (BoardGame, GameId, ImageKey, Instructions, InstructionsKey, Key, PackingStep, SessionInfo)
+import Types (BoardGame, GameId, ImageKey, Instructions, InstructionsKey, PackingStep, SessionInfo)
 import Web.Event.Event (Event, preventDefault, target)
 import Web.File.File (File, toBlob)
 import Web.File.FileList (item)
@@ -156,7 +156,7 @@ handleAction NewStep = do
   case state.instructions of
     Success instructions -> do
       let nextOrdinal = 1 + fromMaybe 0 (maximum (_.stepOrdinal <$> instructions.steps))
-      modify_ $ \state -> state { instructions = Success (instructions { steps = instructions.steps <> [ defaultStep nextOrdinal ] }) }
+      modify_ _ { instructions = Success (instructions { steps = instructions.steps <> [ defaultStep nextOrdinal ] }) }
     _ -> pure unit
 handleAction (ToggleExpansion gameId) = do
   state <- get
@@ -182,38 +182,38 @@ handleAction (RemoveStep step) = do
             Nothing -> state.images
       let filtered = filter (\s -> s /= step) $ sortWith _.stepOrdinal instructions.steps
       let reordered = mapWithIndex (\i s -> s { stepOrdinal = i + 1 }) filtered
-      modify_ \state -> state { instructions = Success (instructions { steps = reordered }), images = newImages }
+      modify_ _ { instructions = Success (instructions { steps = reordered }), images = newImages }
     _ -> pure unit
 handleAction (UpdateStepDescription step str) = do
   state <- get
   case state.instructions of
     Success instructions ->
-      modify_ (\state -> state { instructions = Success (instructions { steps = map (\s -> if s == step then step { description = str } else s) instructions.steps }) })
+      modify_ (_ { instructions = Success (instructions { steps = map (\s -> if s == step then step { description = str } else s) instructions.steps }) })
     _ -> pure unit
 handleAction (UpdateOtherMaterials str) = do
   state <- get
   case state.instructions of
     Success instructions ->
-      modify_ (\state -> state { instructions = Success (instructions { otherMaterials = str }) })
+      modify_ (_ { instructions = Success (instructions { otherMaterials = str }) })
     _ -> pure unit
 
 handleAction ToggleSleeves = do
   state <- get
   case state.instructions of
     Success instructions ->
-      modify_ (\state -> state { instructions = Success (instructions { allowsSleeves = not instructions.allowsSleeves }) })
+      modify_ (_ { instructions = Success (instructions { allowsSleeves = not instructions.allowsSleeves }) })
     _ -> pure unit
 handleAction ToggleBaggies = do
   state <- get
   case state.instructions of
     Success instructions ->
-      modify_ (\state -> state { instructions = Success (instructions { requiresBaggies = not instructions.requiresBaggies }) })
+      modify_ (_ { instructions = Success (instructions { requiresBaggies = not instructions.requiresBaggies }) })
     _ -> pure unit
 handleAction (UpdateCustomInsertLink str) = do
   state <- get
   case state.instructions of
     Success instructions ->
-      modify_ (\state -> state { instructions = Success (instructions { customInsert = str }) })
+      modify_ (_ { instructions = Success (instructions { customInsert = str }) })
     _ -> pure unit
 handleAction (ImageUploaded step evt) = do
   state <- get
@@ -230,7 +230,7 @@ handleAction (ImageUploaded step evt) = do
                   let blob = toBlob file
                   imageId <- wrap <$> liftEffect genUUID
                   imageContent <- liftAff $ FRA.readAsDataURL blob
-                  modify_ \state -> state
+                  modify_ _
                     { instructions = Success
                         ( instructions
                             { steps = map

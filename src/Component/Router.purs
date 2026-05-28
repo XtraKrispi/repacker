@@ -4,11 +4,12 @@ import Prelude
 
 import Component.Game as Game
 import Component.Home as Home
-import Component.NewInstructions as NewInstructions
+import Component.Instructions as Instructions
 import Component.Navbar as Navbar
 import Component.Profile as Profile
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
+import Data.UUID (toString)
 import Data.UUID as UUID
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -82,11 +83,12 @@ render state = HH.div []
           GameR gameId -> HH.slot_ _page ("game " <> (unwrap gameId)) Game.component { gameId: gameId, client: state.client, session: state.session }
           ProfileR userId -> HH.slot_ _page ("profile " <> (UUID.toString $ unwrap (unwrap userId))) Profile.component { client: state.client, userId, isReadOnly: Just userId /= (_.userId <$> state.session) }
           NewInstructionsR gameId -> case state.session of
-            Just s -> HH.slot_ _page ("new-instructions " <> unwrap gameId) NewInstructions.component { client: state.client, gameId, sessionInfo: s, existingKey: Nothing }
-            Nothing ->
-              -- TODO: Do something here
-              HH.div [] []
-      -- _ -> HH.div [] []
+            Just s -> HH.slot_ _page ("new-instructions " <> unwrap gameId) Instructions.component { client: state.client, gameId, sessionInfo: s, existingKey: Nothing }
+            Nothing -> HH.div [] []
+          UpdateInstructionsR gameId instructionsKey ->
+            case state.session of
+              Just s -> HH.slot_ _page ("update-instructions " <> unwrap gameId <> (toString (unwrap instructionsKey))) Instructions.component { client: state.client, gameId, sessionInfo: s, existingKey: Just instructionsKey }
+              Nothing -> HH.div [] []
       ]
   ]
 

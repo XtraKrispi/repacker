@@ -15,7 +15,6 @@ import Data.UUID (UUID, parseUUID, toString)
 import Foreign (Foreign, ForeignError(..))
 import Supabase.Auth (UserEmail)
 import Supabase.Auth.Types (UserId)
-import Web.File.File (File)
 import Yoga.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
 newtype GameId = GameId String
@@ -101,6 +100,10 @@ newtype Key a = Key UUID
 derive instance Newtype (Key a) _
 derive instance Eq (Key a)
 derive instance Ord (Key a)
+derive instance Generic (Key a) _
+
+instance Show (Key a) where
+  show = genericShow
 
 instance WriteForeign (Key a) where
   writeImpl = writeImpl <<< toString <<< unwrap
