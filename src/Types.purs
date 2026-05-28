@@ -84,7 +84,7 @@ type Instructions =
 
 type PackingStep =
   { description :: String
-  , image :: Maybe ImageKey
+  , image :: Maybe FileName
   , stepOrdinal :: Int
   }
 
@@ -117,3 +117,4 @@ instance ReadForeign (Key a) where
 
 type InstructionsKey = Key Instructions
 
+type FileName = String

@@ -17,7 +17,7 @@ import Data.Set as Set
 import Data.Tuple (Tuple)
 import Data.Tuple as Tuple
 import Data.Tuple.Nested ((/\))
-import Data.UUID (genUUID)
+import Data.UUID (genUUID, toString)
 import Database.Instructions as Database
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -38,14 +38,12 @@ import Network.RemoteData as RemoteData
 import Route (Route(..), navigate)
 import Store as S
 import Supabase (Client)
-import Types (BoardGame, GameId, ImageKey, Instructions, InstructionsKey, PackingStep, SessionInfo)
+import Types (BoardGame, FileName, GameId, Instructions, InstructionsKey, PackingStep, SessionInfo)
 import Web.Event.Event (Event, preventDefault, target)
-import Web.File.File (File, toBlob)
+import Web.File.File (File, name, toBlob)
 import Web.File.FileList (item)
 import Web.File.FileReader.Aff as FRA
 import Web.HTML.HTMLInputElement (files, fromEventTarget)
-
--- TODO : Add feedback... global solution
 
 type CoreData =
   ( client :: Client
@@ -54,7 +52,10 @@ type CoreData =
   , existingKey :: Maybe InstructionsKey
   )
 
-type Images = Map ImageKey (Tuple File String)
+type FileContents = String
+
+type Images = Map FileName (Tuple File FileContents)
+
 type State =
   { game :: RemoteData String BoardGame
   , instructions :: RemoteData String Instructions
@@ -184,7 +185,7 @@ handleAction (RemoveStep step) = do
       let
         newImages =
           case find (_ == step) instructions.steps >>= _.image of
-            Just imageId -> Map.delete imageId state.images
+            Just image -> Map.delete image state.images
             Nothing -> state.images
       let filtered = filter (\s -> s /= step) $ sortWith _.stepOrdinal instructions.steps
       let reordered = mapWithIndex (\i s -> s { stepOrdinal = i + 1 }) filtered
@@ -234,7 +235,8 @@ handleAction (ImageUploaded step evt) = do
               case item 0 files of
                 Just file -> do
                   let blob = toBlob file
-                  imageId <- wrap <$> liftEffect genUUID
+                  imageKey <- liftEffect genUUID
+                  let fileName = toString imageKey <> "__" <> name file
                   imageContent <- liftAff $ FRA.readAsDataURL blob
                   modify_ _
                     { instructions = Success
@@ -242,13 +244,13 @@ handleAction (ImageUploaded step evt) = do
                             { steps = map
                                 ( \s ->
                                     if s == step then
-                                      s { image = Just imageId }
+                                      s { image = Just fileName }
                                     else s
                                 )
                                 instructions.steps
                             }
                         )
-                    , images = Map.insertWith (\_ n -> n) imageId (file /\ imageContent) state.images
+                    , images = Map.insertWith (\_ n -> n) fileName (file /\ imageContent) state.images
                     }
                 Nothing -> pure unit
             Nothing -> pure unit
@@ -462,7 +464,7 @@ materialsSection instructions =
 
     ]
 
-renderStep :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> Map ImageKey (Tuple File String) -> PackingStep -> HH.ComponentHTML Action slots m
+renderStep :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> Map FileName (Tuple File String) -> PackingStep -> HH.ComponentHTML Action slots m
 renderStep validationErrors images step =
   HH.div [ HP.class_ (H.ClassName "step-item card bg-base-200 shadow-sm border border-base-300") ]
     [ HH.div [ HP.class_ (H.ClassName "card-body p-4 flex flex-row gap-4") ]
@@ -529,13 +531,6 @@ renderImage Nothing =
     [ HH.text "Add Photo" ]
 renderImage (Just (_ /\ imageContent)) = HH.img [ HP.src imageContent ]
 
-{-
-
-renderImage :: Text -> Maybe Text -> HtmlUrl Route
-renderImage _ Nothing = [hamlet|<span class="text-[10px] uppercase font-bold">Add Photo|]
-renderImage imageId (Just image) = [hamlet|<img src="#{image}"><input type="hidden" name="#{imageId}-txt" value="#{image}">|]
-
--}
 renderExpansion :: forall slots m. MonadAff m => MonadEffect m => { gameId :: GameId, title :: String } -> HH.ComponentHTML Action slots m
 renderExpansion { gameId, title } =
   HH.label [ HP.class_ (H.ClassName "label cursor-pointer hover:bg-base-200 rounded px-2") ]

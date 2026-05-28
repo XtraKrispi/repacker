@@ -3,7 +3,6 @@ module Store where
 import Prelude
 
 import Data.Array (filter)
-import Data.Generic.Rep (class Generic)
 import Types (Key)
 
 data ToastKey

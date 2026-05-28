@@ -8,8 +8,7 @@ import Prelude
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
-import Prim.Row (class Union)
-import Supabase (Client, Table, eq_, from, maybeSingle, mkTable, select, upsert, upsertWith)
+import Supabase (Client, Table, eq_, from, maybeSingle, mkTable, select, upsertWith)
 import Supabase.Auth.Types (UserId)
 import Types (Profile)
 
