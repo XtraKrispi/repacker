@@ -98,58 +98,89 @@ handleAction (SaveProfile event) = do
     Nothing -> pure unit
 
 render :: forall slots m. State -> H.ComponentHTML Action slots m
-render state = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
-  [ HH.h2 [ HP.class_ (H.ClassName "text-2xl font-bold") ]
-      [ HH.text "Profile"
-      ]
-  , HH.div []
-      [ case state.profile of
-          NotAsked -> HH.text ""
-          Loading -> HH.text "Loading"
-          Success p | not state.isReadOnly -> HH.form [ HE.onSubmit SaveProfile ]
-            [ HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
-                [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "Email" ]
-                , HH.input
-                    [ HP.type_ InputText
-                    , HP.readOnly true
-                    , HP.class_ (H.ClassName "input")
-                    , HP.value $ maybe "" (unwrap <<< _.email) p
-                    ]
+render state = HH.div [ HP.class_ (H.ClassName "max-w-md mx-auto w-full") ]
+  [ HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
+      [ HH.div [ HP.class_ (H.ClassName "card-body") ]
+          [ HH.h2 [ HP.class_ (H.ClassName "card-title text-2xl text-primary") ]
+              [ HH.text "Profile" ]
+          , case state.profile of
+              NotAsked -> HH.text ""
+              Loading -> HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-2 py-8") ]
+                [ HH.span [ HP.class_ (H.ClassName "loading loading-spinner loading-lg text-primary") ] []
+                , HH.p [ HP.class_ (H.ClassName "text-base-content/70") ] [ HH.text "Loading profile..." ]
                 ]
-            , HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
-                [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "Username" ]
-                , HH.input
-                    [ HP.type_ InputText
-                    , HP.class_ (H.ClassName "input")
-                    , HP.placeholder "Username"
-                    , HP.value state.username
-                    , HE.onValueInput UpdateUsername
-                    ]
-                ]
-            , HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
-                [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "First Name" ]
-                , HH.input
-                    [ HP.type_ InputText
-                    , HP.class_ (H.ClassName "input")
-                    , HP.placeholder "First Name"
-                    , HP.value state.firstName
-                    , HE.onValueInput UpdateFirstName
-                    ]
-                ]
-            , HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
-                [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "Last Name" ]
-                , HH.input
-                    [ HP.type_ InputText
-                    , HP.class_ (H.ClassName "input")
-                    , HP.placeholder "Last Name"
-                    , HP.value state.lastName
-                    , HE.onValueInput UpdateLastName
-                    ]
-                ]
-            , HH.button [ HP.class_ (H.ClassName "btn btn-primary") ]
-                [ HH.text "Save" ]
-            ]
-          Success _p | otherwise -> HH.div [] [ HH.text "UPDATE ME FOR READ ONLY" ]
-          Failure _err -> HH.text "UPDATE ME FOR FAILURE"
+              Failure err -> HH.div [ HP.class_ (H.ClassName "alert alert-error") ]
+                [ HH.span_ [ HH.text err ] ]
+              Success p | not state.isReadOnly -> renderForm state p
+              Success p -> renderReadOnly p
+          ]
       ]
   ]
+
+renderForm :: forall slots m. State -> Maybe Profile -> H.ComponentHTML Action slots m
+renderForm state p = HH.form
+  [ HE.onSubmit SaveProfile
+  , HP.class_ (H.ClassName "flex flex-col gap-2")
+  ]
+  [ HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
+      [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "Email" ]
+      , HH.input
+          [ HP.type_ InputText
+          , HP.disabled true
+          , HP.class_ (H.ClassName "input w-full")
+          , HP.value $ maybe "" (unwrap <<< _.email) p
+          ]
+      ]
+  , HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
+      [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "Username" ]
+      , HH.input
+          [ HP.type_ InputText
+          , HP.class_ (H.ClassName "input w-full")
+          , HP.placeholder "Username"
+          , HP.value state.username
+          , HE.onValueInput UpdateUsername
+          ]
+      ]
+  , HH.div [ HP.class_ (H.ClassName "grid grid-cols-1 sm:grid-cols-2 gap-2") ]
+      [ HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
+          [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "First Name" ]
+          , HH.input
+              [ HP.type_ InputText
+              , HP.class_ (H.ClassName "input w-full")
+              , HP.placeholder "First Name"
+              , HP.value state.firstName
+              , HE.onValueInput UpdateFirstName
+              ]
+          ]
+      , HH.fieldset [ HP.class_ (H.ClassName "fieldset") ]
+          [ HH.legend [ HP.class_ (H.ClassName "fieldset-legend") ] [ HH.text "Last Name" ]
+          , HH.input
+              [ HP.type_ InputText
+              , HP.class_ (H.ClassName "input w-full")
+              , HP.placeholder "Last Name"
+              , HP.value state.lastName
+              , HE.onValueInput UpdateLastName
+              ]
+          ]
+      ]
+  , HH.div [ HP.class_ (H.ClassName "card-actions justify-end mt-4") ]
+      [ HH.button [ HP.class_ (H.ClassName "btn btn-primary") ]
+          [ HH.text "Save" ]
+      ]
+  ]
+
+renderReadOnly :: forall action slots m. Maybe Profile -> H.ComponentHTML action slots m
+renderReadOnly Nothing = HH.div [ HP.class_ (H.ClassName "text-base-content/60 italic py-4") ]
+  [ HH.text "This user hasn't set up a profile yet." ]
+renderReadOnly (Just profile) = HH.dl [ HP.class_ (H.ClassName "flex flex-col gap-3") ]
+  [ field "Username" profile.username
+  , field "First Name" profile.firstName
+  , field "Last Name" profile.lastName
+  ]
+  where
+  field :: String -> String -> H.ComponentHTML action slots m
+  field label value = HH.div [ HP.class_ (H.ClassName "flex flex-col") ]
+    [ HH.dt [ HP.class_ (H.ClassName "text-sm text-base-content/60") ] [ HH.text label ]
+    , HH.dd [ HP.class_ (H.ClassName "text-base") ]
+        [ HH.text (if value == "" then "—" else value) ]
+    ]
