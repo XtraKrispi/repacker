@@ -3,11 +3,10 @@ module Component.Game where
 import Prelude
 
 import Bgg (bggThing)
+import Data.Array (length)
 import Data.Maybe (Maybe(..), maybe)
-import Data.Profunctor.Split (unSplit)
-import Data.Tuple (Tuple)
+import Data.Tuple.Nested (type (/\), (/\))
 import Database.Instructions (fetchInstructions)
-import Debug (trace)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
 import Halogen (get, modify_)
@@ -23,13 +22,13 @@ import Network.RemoteData (RemoteData(..), fromEither)
 import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
 import Supabase (Client)
-import Supabase.Auth.Types (UserId(..))
-import Types (BoardGame, GameId, Instructions, SessionInfo)
+import Supabase.Auth.Types (UserId)
+import Types (BoardGame, GameId, Instructions, InstructionsKey, SessionInfo)
 
 type CoreData = (gameId :: GameId, client :: Client, session :: Maybe SessionInfo)
 type State =
   { game :: RemoteData String BoardGame
-  , instructions :: RemoteData String (Array (Tuple UserId Instructions))
+  , instructions :: RemoteData String (Array (UserId /\ InstructionsKey /\ Instructions))
   | CoreData
   }
 
@@ -77,7 +76,12 @@ renderGameDetails (Success game) = HH.div
           ]
       ]
   ]
-renderGameDetails Loading = HH.div_ [ HH.text "Loading..." ]
+renderGameDetails Loading = HH.div [ HP.class_ (H.ClassName "hero min-h-72 rounded-2xl bg-base-200") ]
+  [ HH.div [ HP.class_ (H.ClassName "hero-content text-center flex flex-col gap-4") ]
+      [ HH.span [ HP.class_ (H.ClassName "loading loading-spinner loading-lg text-primary") ] []
+      , HH.p [ HP.class_ (H.ClassName "text-base-content/70") ] [ HH.text "Loading game..." ]
+      ]
+  ]
 renderGameDetails (Failure err) = HH.div [ HP.class_ (H.ClassName "alert alert-error") ]
   [ Svg.svg
       [ SP.class_ (H.ClassName "h-6 w-6 shrink-0 stroke-current")
@@ -108,7 +112,7 @@ renderGameDetails (Failure err) = HH.div [ HP.class_ (H.ClassName "alert alert-e
   ]
 renderGameDetails NotAsked = HH.div [] []
 
-renderInstructions :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe SessionInfo -> RemoteData String (Array (Tuple UserId Instructions)) -> HH.ComponentHTML action slots m
+renderInstructions :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe SessionInfo -> RemoteData String (Array (UserId /\ InstructionsKey /\ Instructions)) -> HH.ComponentHTML action slots m
 renderInstructions gameId mUser (Success []) = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ]
   [ Svg.svg
       [ SP.class_ (H.ClassName "h-12 w-12 opacity-40")
@@ -151,5 +155,44 @@ renderInstructions gameId mUser (Success []) = HH.div [ HP.class_ (H.ClassName "
         [ HH.text "Log in above to add your own"
         ]
   ]
-renderInstructions gameId mUser (Success xs) = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
-renderInstructions gameId mUser _ = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
+renderInstructions gameId mUser (Success xs) = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
+  [ HH.div [ HP.class_ (H.ClassName "flex justify-between items-center") ]
+      [ HH.h2 [ HP.class_ (H.ClassName "text-2xl font-bold text-primary") ]
+          [ HH.text "Packing Guides" ]
+      , case mUser of
+          Just _ -> HH.a
+            [ HP.class_ (H.ClassName "btn btn-primary")
+            , HP.href ("#" <> print routeCodec (NewInstructionsR gameId))
+            ]
+            [ HH.text "+ Add Your Own" ]
+          Nothing -> HH.text ""
+      ]
+  , HH.div [ HP.class_ (H.ClassName "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4") ]
+      $ renderInstructionCard gameId <$> xs
+  ]
+renderInstructions _ _ Loading = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ]
+  [ HH.span [ HP.class_ (H.ClassName "loading loading-spinner loading-lg") ] []
+  , HH.p [ HP.class_ (H.ClassName "text-lg") ] [ HH.text "Loading packing guides..." ]
+  ]
+renderInstructions _ _ _ = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
+
+renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => GameId -> (UserId /\ InstructionsKey /\ Instructions) -> HH.ComponentHTML action slots m
+renderInstructionCard gameId (_ /\ key /\ instructions) = HH.a
+  [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer")
+  , HP.href ("#" <> print routeCodec (UpdateInstructionsR gameId key))
+  ]
+  [ HH.div [ HP.class_ (H.ClassName "card-body") ]
+      [ HH.h3 [ HP.class_ (H.ClassName "card-title text-secondary") ]
+          [ HH.text instructions.description ]
+      , HH.div [ HP.class_ (H.ClassName "flex gap-2 flex-wrap mt-2") ]
+          [ HH.span [ HP.class_ (H.ClassName "badge badge-ghost") ]
+              [ HH.text $ show (length instructions.steps) <> " step" <> if length instructions.steps == 1 then "" else "s" ]
+          , if instructions.allowsSleeves then
+              HH.span [ HP.class_ (H.ClassName "badge badge-info") ] [ HH.text "Sleeves" ]
+            else HH.text ""
+          , if instructions.requiresBaggies then
+              HH.span [ HP.class_ (H.ClassName "badge badge-info") ] [ HH.text "Baggies" ]
+            else HH.text ""
+          ]
+      ]
+  ]

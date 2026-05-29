@@ -333,7 +333,12 @@ render state =
               , instructionsForm validationErrors game instructions state.images
               ]
           ]
-    _ -> HH.div [] []
+    _ -> HH.div [ HP.class_ (H.ClassName "p-8") ]
+      [ HH.div [ HP.class_ (H.ClassName "max-w-4xl mx-auto flex justify-center items-center flex-col gap-4 py-16 text-base-content/70") ]
+          [ HH.span [ HP.class_ (H.ClassName "loading loading-spinner loading-lg text-primary") ] []
+          , HH.p [ HP.class_ (H.ClassName "text-lg") ] [ HH.text "Loading..." ]
+          ]
+      ]
 
 instructionsForm :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> BoardGame -> Instructions -> Images -> H.ComponentHTML Action slots m
 instructionsForm validationErrors game instructions images =

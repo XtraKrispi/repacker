@@ -34,7 +34,7 @@ routeCodec :: RouteDuplex' Route
 routeCodec = default HomeR $ root $ G.sum
   { "HomeR": G.noArgs
   , "GameR": "game" D./ gameId segment
-  , "NewInstructionsR": "game" D./ "new" D./ gameId segment
+  , "NewInstructionsR": "game" D./ gameId segment D./ "new"
   , "UpdateInstructionsR": "game" D./ gameId segment D./ key segment
   , "ProfileR": "profile" D./ userId segment
   }
