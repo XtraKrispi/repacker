@@ -3,12 +3,12 @@ module Component.Instructions where
 import Prelude
 
 import Bgg (bggThing)
-import Component.Helpers (classList)
+import Component.Helpers (addToast, classList)
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
 import Data.Array (catMaybes, filter, find, intercalate, length, mapWithIndex, null, sortWith)
 import Data.Either (Either(..))
 import Data.Foldable (maximum)
-import Data.Map (Map, empty)
+import Data.Map (empty)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
 import Data.MediaType (MediaType(..))
@@ -18,6 +18,7 @@ import Data.Tuple (Tuple)
 import Data.Tuple as Tuple
 import Data.Tuple.Nested ((/\))
 import Data.UUID (genUUID, toString)
+import Database.Instructions (fetchImagesForInstructions, fetchSingleInstructions)
 import Database.Instructions as Database
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -27,7 +28,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (ButtonType(..), InputType(..))
 import Halogen.HTML.Properties as HP
-import Halogen.Store.Monad (class MonadStore, updateStore)
+import Halogen.Store.Monad (class MonadStore)
 import Halogen.Svg.Attributes (Color(..))
 import Halogen.Svg.Attributes as SP
 import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
@@ -38,9 +39,9 @@ import Network.RemoteData as RemoteData
 import Route (Route(..), navigate)
 import Store as S
 import Supabase (Client)
-import Types (BoardGame, FileName, GameId, Instructions, InstructionsKey, PackingStep, SessionInfo)
+import Types (BoardGame, GameId, Image(..), Images, Instructions, InstructionsKey, PackingStep, SessionInfo)
 import Web.Event.Event (Event, preventDefault, target)
-import Web.File.File (File, name, toBlob)
+import Web.File.File (name, toBlob)
 import Web.File.FileList (item)
 import Web.File.FileReader.Aff as FRA
 import Web.HTML.HTMLInputElement (files, fromEventTarget)
@@ -51,10 +52,6 @@ type CoreData =
   , sessionInfo :: SessionInfo
   , existingKey :: Maybe InstructionsKey
   )
-
-type FileContents = String
-
-type Images = Map FileName (Tuple File FileContents)
 
 type State =
   { game :: RemoteData String BoardGame
@@ -141,9 +138,8 @@ initialState { client, gameId, sessionInfo, existingKey } =
   , gameId
   , sessionInfo
   , game: NotAsked
-  , instructions:
-      if isNothing existingKey then Success defaultInstructions
-      else NotAsked
+  , instructions: NotAsked
+
   , existingKey
   , images: empty
   }
@@ -151,11 +147,27 @@ initialState { client, gameId, sessionInfo, existingKey } =
 handleAction :: forall slots output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
   -- TODO: Deal with fetching data here
-  { gameId } <- get
+  { gameId, existingKey, client } <- get
   modify_ \state -> state
     { game = Loading
     }
   eThing <- liftAff $ bggThing gameId
+  case existingKey of
+    Just key -> do
+      modify_ _ { instructions = Loading }
+      mInstructions <- liftAff $ fetchSingleInstructions client key
+      case mInstructions of
+        Nothing -> do
+          addToast { message: "Instructions couldn't be found, redirecting back to game page", severity: S.Error }
+          navigate (GameR gameId)
+        Just (_userId /\ instructions) -> do
+          images <- liftAff $ fetchImagesForInstructions client key
+          modify_ _
+            { images = images
+            , instructions = Success instructions
+            }
+          pure unit
+    Nothing -> modify_ _ { instructions = Success defaultInstructions }
   modify_ _ { game = RemoteData.fromEither eThing }
 handleAction (UpdateInstructionsDescription str) = modify_ $ \state -> state { instructions = map _ { description = str } state.instructions }
 handleAction NewStep = do
@@ -250,7 +262,7 @@ handleAction (ImageUploaded step evt) = do
                                 instructions.steps
                             }
                         )
-                    , images = Map.insertWith (\_ n -> n) fileName (file /\ imageContent) state.images
+                    , images = Map.insertWith (\_ n -> n) fileName (Uploaded file imageContent) state.images
                     }
                 Nothing -> pure unit
             Nothing -> pure unit
@@ -269,21 +281,18 @@ handleAction (Save evt) = do
         case state.instructions of
           Success instructions -> do
             newKey <- wrap <$> liftEffect genUUID
-            results <- liftAff $ Database.newInstructions state.client state.gameId newKey instructions ((\(k /\ (f /\ _)) -> k /\ f) <$> Map.toUnfoldable state.images)
-            toastKey <- wrap <$> liftEffect genUUID
+            results <- liftAff $ Database.newInstructions state.client state.gameId newKey instructions state.images
             case results of
               Right _ -> do
-                updateStore $ S.AddToast
+                addToast
                   { message: "Instructions have been saved."
                   , severity: S.Success
-                  , key: toastKey
                   }
                 navigate $ UpdateInstructionsR state.gameId newKey
               Left _err -> do
-                updateStore $ S.AddToast
+                addToast
                   { message: "There was a problem saving the instructions, please try again."
                   , severity: S.Error
-                  , key: toastKey
                   }
 
           _ -> pure unit
@@ -464,7 +473,7 @@ materialsSection instructions =
 
     ]
 
-renderStep :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> Map FileName (Tuple File String) -> PackingStep -> HH.ComponentHTML Action slots m
+renderStep :: forall slots m. MonadAff m => MonadEffect m => Array (Tuple String String) -> Images -> PackingStep -> HH.ComponentHTML Action slots m
 renderStep validationErrors images step =
   HH.div [ HP.class_ (H.ClassName "step-item card bg-base-200 shadow-sm border border-base-300") ]
     [ HH.div [ HP.class_ (H.ClassName "card-body p-4 flex flex-row gap-4") ]
@@ -525,11 +534,12 @@ renderStep validationErrors images step =
         ]
     ]
 
-renderImage :: forall slots m. MonadAff m => MonadEffect m => Maybe (Tuple File String) -> HH.ComponentHTML Action slots m
+renderImage :: forall slots m. MonadAff m => MonadEffect m => Maybe Image -> HH.ComponentHTML Action slots m
 renderImage Nothing =
   HH.span [ HP.class_ (H.ClassName "text-[10px] uppercase font-bold") ]
     [ HH.text "Add Photo" ]
-renderImage (Just (_ /\ imageContent)) = HH.img [ HP.src imageContent ]
+renderImage (Just (Uploaded _ imageContent)) = HH.img [ HP.src imageContent ]
+renderImage (Just (Downloaded imageContent)) = HH.img [ HP.src imageContent ]
 
 renderExpansion :: forall slots m. MonadAff m => MonadEffect m => { gameId :: GameId, title :: String } -> HH.ComponentHTML Action slots m
 renderExpansion { gameId, title } =

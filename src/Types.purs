@@ -7,14 +7,18 @@ import Data.Either (note)
 import Data.Generic.Rep (class Generic)
 import Data.Identity (Identity(..))
 import Data.List.NonEmpty (NonEmptyList, singleton)
+import Data.Map (Map)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set, toUnfoldable)
 import Data.Show.Generic (genericShow)
+import Data.Tuple (Tuple)
 import Data.UUID (UUID, parseUUID, toString)
 import Foreign (Foreign, ForeignError(..))
 import Supabase.Auth (UserEmail)
 import Supabase.Auth.Types (UserId)
+import Web.File.Blob (Blob)
+import Web.File.File (File)
 import Yoga.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
 newtype GameId = GameId String
@@ -88,9 +92,9 @@ type PackingStep =
   , stepOrdinal :: Int
   }
 
-type ImageKey = Key Image
+type ImageKey = Key ImageK
 
-data Image
+data ImageK
 
 type Url = String
 
@@ -118,3 +122,11 @@ instance ReadForeign (Key a) where
 type InstructionsKey = Key Instructions
 
 type FileName = String
+
+type FileContents = String
+
+data Image
+  = Uploaded File FileContents
+  | Downloaded FileContents
+
+type Images = Map FileName Image

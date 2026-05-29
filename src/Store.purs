@@ -15,11 +15,12 @@ data Severity
 
 derive instance Eq Severity
 
-type Toast =
-  { message :: String
+type Toast = { key :: Key (ToastKey) | ToastMessageR }
+type ToastMessage = { | ToastMessageR }
+type ToastMessageR =
+  ( message :: String
   , severity :: Severity
-  , key :: Key (ToastKey)
-  }
+  )
 
 type Store = { toasts :: Array Toast }
 

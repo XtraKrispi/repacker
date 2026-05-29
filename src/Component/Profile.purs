@@ -2,9 +2,9 @@ module Component.Profile where
 
 import Prelude
 
+import Component.Helpers (addToast)
 import Data.Either (Either(..), either)
 import Data.Maybe (Maybe(..), maybe)
-import Data.UUID (genUUID)
 import Database.Profile (fetchProfile, saveProfile)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -14,13 +14,13 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (InputType(..))
 import Halogen.HTML.Properties as HP
-import Halogen.Store.Monad (class MonadStore, updateStore)
+import Halogen.Store.Monad (class MonadStore)
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteData
 import Store as S
 import Supabase (Client)
 import Supabase.Auth.Types (UserId)
-import Types (Key(..), Profile)
+import Types (Profile)
 import Web.Event.Event (Event, preventDefault)
 
 type CoreData =
@@ -82,10 +82,9 @@ handleAction (SaveProfile event) = do
   liftEffect $ preventDefault event
   { userId, client, firstName, lastName } <- get
   results <- liftAff $ saveProfile client userId { firstName, lastName }
-  toastKey <- Key <$> liftEffect genUUID
   case results of
-    Right _ -> updateStore $ S.AddToast { message: "Your profile has been updated.", key: toastKey, severity: S.Success }
-    Left _err -> updateStore $ S.AddToast { message: "There was an issue saving your profile, please try again.", key: toastKey, severity: S.Error }
+    Right _ -> addToast { message: "Your profile has been updated.", severity: S.Success }
+    Left _err -> addToast { message: "There was an issue saving your profile, please try again.", severity: S.Error }
 
 render :: forall slots m. State -> H.ComponentHTML Action slots m
 render state = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
