@@ -1,7 +1,6 @@
 module FFI.Supabase.Client where
 
-import Prelude
-import Supabase
+import Supabase (Client, SupabaseAnonKey(..), SupabaseUrl(..))
 
 import Data.Newtype (un)
 import Effect (Effect)

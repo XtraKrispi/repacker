@@ -12,12 +12,10 @@ import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Set (Set, toUnfoldable)
 import Data.Show.Generic (genericShow)
-import Data.Tuple (Tuple)
 import Data.UUID (UUID, parseUUID, toString)
 import Foreign (Foreign, ForeignError(..))
 import Supabase.Auth (UserEmail)
 import Supabase.Auth.Types (UserId)
-import Web.File.Blob (Blob)
 import Web.File.File (File)
 import Yoga.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
@@ -64,6 +62,8 @@ type BoardGame =
 type Profile =
   { firstName :: String
   , lastName :: String
+  , username :: String
+  , email :: UserEmail
   }
 
 newtype IncludedExpansions = IncludedExpansions (Set GameId)

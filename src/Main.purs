@@ -4,6 +4,7 @@ import Prelude
 
 import Component.Router as Router
 import Data.Maybe (Maybe(..))
+import Database.Profile (createProfileIfNotExists)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
@@ -46,6 +47,9 @@ main = do
   client <- createClientWithPasskey (SupabaseUrl "https://jruvwolatohqkqxcujjc.supabase.co") (SupabaseAnonKey "sb_publishable_8O5gqGJwgpMdY20XcYoz-Q_vMYzThpZ")
   runHalogenAff do
     session <- mkSessionInfo <$> getUser client
+    case session of
+      Just s -> void $ createProfileIfNotExists client s
+      Nothing -> pure unit
     body <- awaitBody
     root <- runStoreT S.initialStore S.reduce Router.component
     io <- runUI root { initialRoute: HomeR, client, session } body

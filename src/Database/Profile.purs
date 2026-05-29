@@ -1,6 +1,7 @@
 module Database.Profile
   ( fetchProfile
   , saveProfile
+  , createProfileIfNotExists
   ) where
 
 import Prelude
@@ -9,10 +10,11 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Supabase (Client, Table, eq_, from, maybeSingle, mkTable, select, upsertWith)
+import Supabase.Auth (UserEmail)
 import Supabase.Auth.Types (UserId)
-import Types (Profile)
+import Types (Profile, SessionInfo)
 
-type DbProfileRow = (user_id :: UserId, first_name :: String, last_name :: String)
+type DbProfileRow = (user_id :: UserId, first_name :: String, last_name :: String, username :: String, email :: UserEmail)
 
 type DbProfile = { | DbProfileRow }
 
@@ -20,6 +22,14 @@ type UpsertProfile = { onConflict :: String }
 
 profilesTable :: Table DbProfileRow () ()
 profilesTable = mkTable "profiles"
+
+createProfileIfNotExists :: Client -> SessionInfo -> Aff (Either String Unit)
+createProfileIfNotExists client { userId, email } = do
+  results <- fetchProfile client userId
+  case results of
+    Right Nothing -> saveProfile client userId { firstName: "", lastName: "", username: "", email }
+    Right (Just _) -> pure $ Right unit
+    Left err -> pure $ Left err
 
 fetchProfile :: Client -> UserId -> Aff (Either String (Maybe Profile))
 fetchProfile client userId = do
@@ -36,7 +46,7 @@ saveProfile client userId profile = do
     Nothing -> pure $ Right unit
 
 toProfile :: DbProfile -> Profile
-toProfile { first_name, last_name } = { firstName: first_name, lastName: last_name }
+toProfile { first_name, last_name, username, email } = { firstName: first_name, lastName: last_name, username, email }
 
 fromProfile :: UserId -> Profile -> DbProfile
-fromProfile userId { firstName, lastName } = { first_name: firstName, last_name: lastName, user_id: userId }
+fromProfile userId { firstName, lastName, username, email } = { first_name: firstName, last_name: lastName, user_id: userId, username, email }

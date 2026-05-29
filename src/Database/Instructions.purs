@@ -8,7 +8,7 @@ module Database.Instructions
 
 import Prelude
 
-import Control.Parallel (parSequence, parTraverse)
+import Control.Parallel (parTraverse)
 import Data.Array (catMaybes, cons, null)
 import Data.Bifunctor (rmap)
 import Data.DateTime (DateTime)
