@@ -10,7 +10,7 @@ import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
 import Data.Tuple as Tuple
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested (type (/\), (/\))
 import Database.Instructions (fetchImagesForInstructions, fetchSingleInstructions)
 import Database.Profile (fetchProfile)
 import Effect.Aff.Class (class MonadAff, liftAff)
@@ -28,7 +28,10 @@ import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Network.RemoteData (RemoteData(..), withDefault)
 import Network.RemoteData as RemoteData
+import Route (Route(..), routeCodec)
+import Routing.Duplex (print)
 import Supabase (Client)
+import Supabase.Auth.Types (UserId)
 import Types (BoardGame, FileContents, GameId, Image(..), Images, IncludedExpansions(..), Instructions, InstructionsKey, PackingStep, Profile, SessionInfo)
 
 type CoreData =
@@ -48,7 +51,7 @@ derive instance eqViewMode :: Eq ViewMode
 
 type State =
   { game :: RemoteData String BoardGame
-  , instructions :: RemoteData String Instructions
+  , instructions :: RemoteData String (UserId /\ Instructions)
   , authorProfile :: RemoteData String (Maybe Profile)
   , images :: Images
   , viewMode :: ViewMode
@@ -69,7 +72,10 @@ data Action
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
   { initialState
-  , eval: H.mkEval H.defaultEval { initialize = Just Initialize, handleAction = handleAction }
+  , eval: H.mkEval H.defaultEval
+      { initialize = Just Initialize
+      , handleAction = handleAction
+      }
   , render
   }
 
@@ -91,28 +97,31 @@ initialState { client, gameId, instructionsKey, session } =
 handleAction :: forall slots output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
   { client, instructionsKey, gameId } <- get
-  modify_ _ { instructions = Loading, game = Loading, authorProfile = Loading }
+  modify_ _
+    { instructions = Loading
+    , game = Loading
+    , authorProfile = Loading
+    }
   instructions <- liftAff $ fetchSingleInstructions client instructionsKey
   game <- liftAff $ bggThing gameId
   images <- liftAff $ fetchImagesForInstructions client instructionsKey
   profile <- liftAff $ traverse (\(userId /\ _) -> fetchProfile client userId) instructions
 
   modify_ _
-    { instructions = RemoteData.fromMaybe (map Tuple.snd instructions)
+    { instructions = RemoteData.fromMaybe instructions
     , game = RemoteData.fromEither game
     , images = images
     , authorProfile = RemoteData.fromEither $ fromMaybe (Left "Invalid instructions") profile
     }
-  pure unit
 handleAction (SetViewMode mode) = modify_ _ { viewMode = mode, carouselIndex = 0 }
 handleAction NextSlide = modify_ \state ->
   let
-    total = length $ withDefault [] $ map _.steps state.instructions
+    total = length $ withDefault [] $ map (Tuple.snd >>> _.steps) state.instructions
   in
     state { carouselIndex = if state.carouselIndex + 1 >= total then 0 else state.carouselIndex + 1 }
 handleAction PrevSlide = modify_ \state ->
   let
-    total = length $ withDefault [] $ map _.steps state.instructions
+    total = length $ withDefault [] $ map (Tuple.snd >>> _.steps) state.instructions
   in
     state { carouselIndex = if state.carouselIndex <= 0 then total - 1 else state.carouselIndex - 1 }
 handleAction (GoToSlide i) = modify_ _ { carouselIndex = i }
@@ -121,8 +130,8 @@ handleAction CloseExpandedImage = modify_ _ { expandedImage = Nothing }
 
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
 render state = case state.game /\ state.instructions /\ state.authorProfile of
-  (Success game /\ Success instructions /\ Success author) -> HH.div [ HP.class_ (H.ClassName "flex flex-col gap-6 max-w-4xl mx-auto") ]
-    [ renderMetadata author game instructions
+  (Success game /\ Success (authorId /\ instructions) /\ Success author) -> HH.div [ HP.class_ (H.ClassName "flex flex-col gap-6 max-w-4xl mx-auto") ]
+    [ renderMetadata author game instructions (editLink authorId)
     , HH.div [ HP.class_ (H.ClassName "divider") ] []
     , renderStepsHeader state.viewMode (not $ null instructions.steps)
     , case state.viewMode of
@@ -130,7 +139,77 @@ render state = case state.game /\ state.instructions /\ state.authorProfile of
         CarouselView -> renderCarousel state.images instructions.steps state.carouselIndex
     , renderImageLightbox state.expandedImage
     ]
-  _ -> HH.div [] [ HH.text "Need some stuff here" ]
+  _ ->
+    let
+      errors = catMaybes [ failureError state.game, failureError state.instructions, failureError state.authorProfile ]
+    in
+      if null errors then renderLoading else renderError
+  where
+  -- | Show an Edit link only when the logged-in user authored these instructions.
+  editLink authorId
+    | (_.userId <$> state.session) == Just authorId = HH.a
+        [ HP.class_ (H.ClassName "btn btn-sm btn-secondary")
+        , HP.href ("#" <> print routeCodec (UpdateInstructionsR state.gameId state.instructionsKey))
+        ]
+        [ HH.text "Edit" ]
+    | otherwise = HH.text ""
+
+-- | Pull the error message out of a failed request, ignoring every other state.
+failureError :: forall a. RemoteData String a -> Maybe String
+failureError (Failure e) = Just e
+failureError _ = Nothing
+
+-- | Shown while any of the page's requests are still in flight.
+renderLoading :: forall slots m. MonadAff m => MonadEffect m => H.ComponentHTML Action slots m
+renderLoading = HH.div [ HP.class_ (H.ClassName "flex flex-col items-center justify-center gap-4 py-24 max-w-4xl mx-auto") ]
+  [ HH.span [ HP.class_ (H.ClassName "loading loading-spinner loading-lg text-primary") ] []
+  , HH.p [ HP.class_ (H.ClassName "text-base-content/60") ] [ HH.text "Loading packing guide…" ]
+  ]
+
+-- | Shown when one or more requests fail. Deliberately generic so we don't leak
+-- | any internal details to the user; the retry button re-runs every request.
+renderError :: forall slots m. MonadAff m => MonadEffect m => H.ComponentHTML Action slots m
+renderError = HH.div [ HP.class_ (H.ClassName "max-w-4xl mx-auto py-16") ]
+  [ HH.div [ HP.class_ (H.ClassName "alert alert-error flex-col items-start gap-3") ]
+      [ HH.div [ HP.class_ (H.ClassName "flex items-center gap-2") ]
+          [ errorIcon
+          , HH.h2 [ HP.class_ (H.ClassName "font-bold") ] [ HH.text "Something went wrong" ]
+          ]
+      , HH.p [ HP.class_ (H.ClassName "text-sm") ]
+          [ HH.text "We couldn't load this packing guide. Please try again." ]
+      , HH.button
+          [ HP.class_ (H.ClassName "btn btn-sm")
+          , HP.type_ ButtonButton
+          , HE.onClick (\_ -> Initialize)
+          ]
+          [ HH.text "Try again" ]
+      ]
+  ]
+
+-- | A warning triangle to head up the error state.
+errorIcon :: forall slots m. MonadAff m => MonadEffect m => H.ComponentHTML Action slots m
+errorIcon = Svg.svg
+  [ SP.class_ (H.ClassName "h-6 w-6 shrink-0")
+  , SP.fill NoColor
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.stroke (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.strokeLineCap LineCapRound
+      , SP.strokeLineJoin LineJoinRound
+      , SP.strokeWidth 2.0
+      , SP.d
+          [ SP.m SP.Abs 12.0 9.0
+          , SP.v SP.Rel 3.75
+          , SP.m SP.Abs 12.0 15.75
+          , SP.h SP.Rel 0.0
+          , SP.m SP.Abs 10.29 3.86
+          , SP.l SP.Abs 1.82 18.0
+          , SP.l SP.Abs 19.71 18.0
+          , SP.z
+          ]
+      ]
+  ]
 
 -- | A full-screen overlay showing the clicked image at its natural size (up to
 -- | the viewport bounds). Clicking anywhere dismisses it.
@@ -154,16 +233,19 @@ renderImageLightbox (Just img) = HH.div
       [ HH.text "✕" ]
   ]
 
-renderMetadata :: forall slots m. MonadAff m => MonadEffect m => Maybe Profile -> BoardGame -> Instructions -> H.ComponentHTML Action slots m
-renderMetadata author game instructions = HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
+renderMetadata :: forall slots m. MonadAff m => MonadEffect m => Maybe Profile -> BoardGame -> Instructions -> H.ComponentHTML Action slots m -> H.ComponentHTML Action slots m
+renderMetadata author game instructions editLink = HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
   [ HH.div [ HP.class_ (H.ClassName "card-body") ]
-      [ HH.div [ HP.class_ (H.ClassName "flex flex-col gap-1") ]
-          [ HH.h1 [ HP.class_ (H.ClassName "text-3xl font-bold text-primary") ]
-              [ HH.text game.title
-              , maybe (HH.text "") (\y -> HH.text (" (" <> show y <> ")")) game.yearPublished
+      [ HH.div [ HP.class_ (H.ClassName "flex justify-between items-start gap-4") ]
+          [ HH.div [ HP.class_ (H.ClassName "flex flex-col gap-1") ]
+              [ HH.h1 [ HP.class_ (H.ClassName "text-3xl font-bold text-primary") ]
+                  [ HH.text game.title
+                  , maybe (HH.text "") (\y -> HH.text (" (" <> show y <> ")")) game.yearPublished
+                  ]
+              , HH.p [ HP.class_ (H.ClassName "text-sm text-base-content/60") ]
+                  [ HH.text $ "Packing guide by " <> extractAuthorName author ]
               ]
-          , HH.p [ HP.class_ (H.ClassName "text-sm text-base-content/60") ]
-              [ HH.text $ "Packing guide by " <> extractAuthorName author ]
+          , editLink
           ]
       , HH.p [ HP.class_ (H.ClassName "text-base-content/80 mt-2") ]
           [ HH.text instructions.description ]
@@ -404,12 +486,21 @@ renderCarousel images steps currentIndex =
   in
     HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
       [ HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl overflow-hidden") ]
-          [ HH.div [ HP.class_ (H.ClassName "relative") ]
+          [ HH.div [ HP.class_ (H.ClassName "relative bg-base-300") ]
               [ case currentImage of
-                  Just img -> HH.img
-                    [ HP.class_ (H.ClassName "object-cover w-full h-96")
-                    , HP.src $ getFileContents img
-                    , HP.alt $ "Step " <> show current.stepOrdinal
+                  Just img -> HH.div
+                    [ HP.class_ (H.ClassName "group relative w-full h-96 cursor-zoom-in")
+                    , HP.title "Click to expand"
+                    , HE.onClick (\_ -> ExpandImage (getFileContents img))
+                    ]
+                    [ HH.img
+                        [ HP.class_ (H.ClassName "object-contain w-full h-full")
+                        , HP.src $ getFileContents img
+                        , HP.alt $ "Step " <> show current.stepOrdinal
+                        ]
+                    , HH.div
+                        [ HP.class_ (H.ClassName "absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100") ]
+                        [ expandIcon ]
                     ]
                   Nothing -> HH.text ""
               , HH.button

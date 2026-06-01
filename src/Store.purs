@@ -5,6 +5,8 @@ import Prelude
 import Data.Array (filter)
 import Types (Key)
 
+-- TODO: Add session to the store... and wire up with receive so that we automatically update the views when the user logs in or out
+
 data ToastKey
 
 data Severity
