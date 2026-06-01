@@ -22,6 +22,7 @@ data Route
   | GameR GameId
   | NewInstructionsR GameId
   | UpdateInstructionsR GameId InstructionsKey
+  | ViewInstructionsR GameId InstructionsKey
   | ProfileR UserId
 
 derive instance genericRoute :: Generic Route _
@@ -36,6 +37,7 @@ routeCodec = default HomeR $ root $ G.sum
   , "GameR": "game" D./ gameId segment
   , "NewInstructionsR": "game" D./ gameId segment D./ "new"
   , "UpdateInstructionsR": "game" D./ gameId segment D./ key segment
+  , "ViewInstructionsR": "game" D./ gameId segment D./ "view" D./ key segment
   , "ProfileR": "profile" D./ userId segment
   }
 

@@ -168,7 +168,7 @@ renderInstructions gameId mUser (Success xs) = HH.div [ HP.class_ (H.ClassName "
           Nothing -> HH.text ""
       ]
   , HH.div [ HP.class_ (H.ClassName "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4") ]
-      $ renderInstructionCard gameId <$> xs
+      $ renderInstructionCard gameId (_.userId <$> mUser) <$> xs
   ]
 renderInstructions _ _ Loading = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ]
   [ HH.span [ HP.class_ (H.ClassName "loading loading-spinner loading-lg") ] []
@@ -176,23 +176,37 @@ renderInstructions _ _ Loading = HH.div [ HP.class_ (H.ClassName "flex justify-c
   ]
 renderInstructions _ _ _ = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
 
-renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => GameId -> (UserId /\ InstructionsKey /\ Instructions) -> HH.ComponentHTML action slots m
-renderInstructionCard gameId (_ /\ key /\ instructions) = HH.a
-  [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl hover:shadow-2xl transition-shadow cursor-pointer")
-  , HP.href ("#" <> print routeCodec (UpdateInstructionsR gameId key))
-  ]
-  [ HH.div [ HP.class_ (H.ClassName "card-body") ]
-      [ HH.h3 [ HP.class_ (H.ClassName "card-title text-secondary") ]
-          [ HH.text instructions.description ]
-      , HH.div [ HP.class_ (H.ClassName "flex gap-2 flex-wrap mt-2") ]
-          [ HH.span [ HP.class_ (H.ClassName "badge badge-ghost") ]
-              [ HH.text $ show (length instructions.steps) <> " step" <> if length instructions.steps == 1 then "" else "s" ]
-          , if instructions.allowsSleeves then
-              HH.span [ HP.class_ (H.ClassName "badge badge-info") ] [ HH.text "Sleeves" ]
-            else HH.text ""
-          , if instructions.requiresBaggies then
-              HH.span [ HP.class_ (H.ClassName "badge badge-info") ] [ HH.text "Baggies" ]
-            else HH.text ""
+renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe UserId -> (UserId /\ InstructionsKey /\ Instructions) -> HH.ComponentHTML action slots m
+renderInstructionCard gameId mViewerId (createdBy /\ key /\ instructions) =
+  let
+    isOwner = mViewerId == Just createdBy
+    viewBtn = HH.a
+      [ HP.class_ (H.ClassName "btn btn-sm btn-primary")
+      , HP.href ("#" <> print routeCodec (ViewInstructionsR gameId key))
+      ]
+      [ HH.text "View" ]
+    editBtn = HH.a
+      [ HP.class_ (H.ClassName "btn btn-sm btn-secondary")
+      , HP.href ("#" <> print routeCodec (UpdateInstructionsR gameId key))
+      ]
+      [ HH.text "Edit" ]
+  in
+    HH.div
+      [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
+      [ HH.div [ HP.class_ (H.ClassName "card-body") ]
+          [ HH.h3 [ HP.class_ (H.ClassName "card-title text-secondary") ]
+              [ HH.text instructions.description ]
+          , HH.div [ HP.class_ (H.ClassName "flex gap-2 flex-wrap mt-2") ]
+              [ HH.span [ HP.class_ (H.ClassName "badge badge-ghost") ]
+                  [ HH.text $ show (length instructions.steps) <> " step" <> if length instructions.steps == 1 then "" else "s" ]
+              , if instructions.allowsSleeves then
+                  HH.span [ HP.class_ (H.ClassName "badge badge-info") ] [ HH.text "Sleeves" ]
+                else HH.text ""
+              , if instructions.requiresBaggies then
+                  HH.span [ HP.class_ (H.ClassName "badge badge-info") ] [ HH.text "Baggies" ]
+                else HH.text ""
+              ]
+          , HH.div [ HP.class_ (H.ClassName "card-actions justify-end mt-4") ]
+              $ if isOwner then [ editBtn, viewBtn ] else [ viewBtn ]
           ]
       ]
-  ]
