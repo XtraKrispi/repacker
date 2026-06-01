@@ -53,6 +53,7 @@ type State =
   , images :: Images
   , viewMode :: ViewMode
   , carouselIndex :: Int
+  , expandedImage :: Maybe FileContents
   | CoreData
   }
 
@@ -62,6 +63,8 @@ data Action
   | NextSlide
   | PrevSlide
   | GoToSlide Int
+  | ExpandImage FileContents
+  | CloseExpandedImage
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -81,6 +84,7 @@ initialState { client, gameId, instructionsKey, session } =
   , authorProfile: NotAsked
   , viewMode: ListView
   , carouselIndex: 0
+  , expandedImage: Nothing
   , images: Map.empty
   }
 
@@ -112,6 +116,8 @@ handleAction PrevSlide = modify_ \state ->
   in
     state { carouselIndex = if state.carouselIndex <= 0 then total - 1 else state.carouselIndex - 1 }
 handleAction (GoToSlide i) = modify_ _ { carouselIndex = i }
+handleAction (ExpandImage img) = modify_ _ { expandedImage = Just img }
+handleAction CloseExpandedImage = modify_ _ { expandedImage = Nothing }
 
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
 render state = case state.game /\ state.instructions /\ state.authorProfile of
@@ -122,8 +128,31 @@ render state = case state.game /\ state.instructions /\ state.authorProfile of
     , case state.viewMode of
         ListView -> renderStepsList state.images instructions.steps
         CarouselView -> renderCarousel state.images instructions.steps state.carouselIndex
+    , renderImageLightbox state.expandedImage
     ]
   _ -> HH.div [] [ HH.text "Need some stuff here" ]
+
+-- | A full-screen overlay showing the clicked image at its natural size (up to
+-- | the viewport bounds). Clicking anywhere dismisses it.
+renderImageLightbox :: forall slots m. MonadAff m => MonadEffect m => Maybe FileContents -> H.ComponentHTML Action slots m
+renderImageLightbox Nothing = HH.text ""
+renderImageLightbox (Just img) = HH.div
+  [ HP.class_ (H.ClassName "fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-zoom-out")
+  , HE.onClick (\_ -> CloseExpandedImage)
+  ]
+  [ HH.img
+      [ HP.class_ (H.ClassName "max-w-full max-h-full object-contain")
+      , HP.src img
+      , HP.alt "Expanded step image"
+      ]
+  , HH.button
+      [ HP.class_ (H.ClassName "btn btn-circle btn-sm absolute top-4 right-4")
+      , HP.type_ ButtonButton
+      , HP.title "Close"
+      , HE.onClick (\_ -> CloseExpandedImage)
+      ]
+      [ HH.text "✕" ]
+  ]
 
 renderMetadata :: forall slots m. MonadAff m => MonadEffect m => Maybe Profile -> BoardGame -> Instructions -> H.ComponentHTML Action slots m
 renderMetadata author game instructions = HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
@@ -297,6 +326,35 @@ carouselIcon = Svg.svg
       ]
   ]
 
+-- | A four-corner arrows icon hinting that the image can be expanded.
+expandIcon :: forall slots m. MonadAff m => MonadEffect m => H.ComponentHTML Action slots m
+expandIcon = Svg.svg
+  [ SP.class_ (H.ClassName "h-10 w-10 text-white drop-shadow")
+  , SP.fill NoColor
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.stroke (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.strokeLineCap LineCapRound
+      , SP.strokeLineJoin LineJoinRound
+      , SP.strokeWidth 2.0
+      , SP.d
+          [ SP.m SP.Abs 3.75 8.25
+          , SP.v SP.Rel (-4.5)
+          , SP.h SP.Rel 4.5
+          , SP.m SP.Abs 15.75 3.75
+          , SP.h SP.Rel 4.5
+          , SP.v SP.Rel 4.5
+          , SP.m SP.Abs 20.25 15.75
+          , SP.v SP.Rel 4.5
+          , SP.h SP.Rel (-4.5)
+          , SP.m SP.Abs 8.25 20.25
+          , SP.h SP.Rel (-4.5)
+          , SP.v SP.Rel (-4.5)
+          ]
+      ]
+  ]
+
 renderStepsList :: forall slots m. MonadAff m => MonadEffect m => Images -> Array PackingStep -> H.ComponentHTML Action slots m
 renderStepsList _ [] = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center py-16 text-base-content/50") ]
   [ HH.p [ HP.class_ (H.ClassName "text-lg") ] [ HH.text "No steps in this guide yet" ] ]
@@ -306,10 +364,19 @@ renderStepCard :: forall slots m. MonadAff m => MonadEffect m => Images -> Packi
 renderStepCard images step = HH.div [ HP.class_ (H.ClassName "card md:card-side bg-base-200 shadow-sm border border-base-300") ]
   [ HH.figure [ HP.class_ (H.ClassName "md:w-64 shrink-0") ]
       [ case step.image >>= \k -> Map.lookup k images of
-          Just img -> HH.img
-            [ HP.class_ (H.ClassName "object-cover w-full h-48 md:h-full")
-            , HP.src $ getFileContents img
-            , HP.alt $ "Step " <> show step.stepOrdinal
+          Just img -> HH.div
+            [ HP.class_ (H.ClassName "group relative w-full h-48 md:h-full cursor-zoom-in")
+            , HP.title "Click to expand"
+            , HE.onClick (\_ -> ExpandImage (getFileContents img))
+            ]
+            [ HH.img
+                [ HP.class_ (H.ClassName "object-cover w-full h-full")
+                , HP.src $ getFileContents img
+                , HP.alt $ "Step " <> show step.stepOrdinal
+                ]
+            , HH.div
+                [ HP.class_ (H.ClassName "absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100") ]
+                [ expandIcon ]
             ]
           Nothing -> HH.text ""
       ]
