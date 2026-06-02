@@ -112,11 +112,11 @@ render state = HH.div []
           GameR gameId -> HH.slot_ _page ("game " <> (unwrap gameId)) Game.component { gameId: gameId, client: state.client, session: state.session }
           ProfileR userId -> HH.slot_ _page ("profile " <> (UUID.toString $ unwrap (unwrap userId))) Profile.component { client: state.client, userId }
           NewInstructionsR gameId -> case state.session of
-            Just s -> HH.slot_ _page ("new-instructions " <> unwrap gameId) Instructions.component { client: state.client, gameId, sessionInfo: s, existingKey: Nothing }
+            Just s -> HH.slot_ _page ("new-instructions " <> unwrap gameId) Instructions.component { client: state.client, gameId, session: s, existingKey: Nothing }
             Nothing -> HH.div [] []
           UpdateInstructionsR gameId instructionsKey ->
             case state.session of
-              Just s -> HH.slot_ _page ("update-instructions " <> unwrap gameId <> (toString (unwrap instructionsKey))) Instructions.component { client: state.client, gameId, sessionInfo: s, existingKey: Just instructionsKey }
+              Just s -> HH.slot_ _page ("update-instructions " <> unwrap gameId <> (toString (unwrap instructionsKey))) Instructions.component { client: state.client, gameId, session: s, existingKey: Just instructionsKey }
               Nothing -> HH.div [] []
           ViewInstructionsR gameId instructionsKey ->
             HH.slot_ _page ("view-instructions " <> unwrap gameId <> (toString (unwrap instructionsKey))) ViewInstructions.component { client: state.client, gameId, instructionsKey, session: state.session }

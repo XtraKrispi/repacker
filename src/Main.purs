@@ -52,7 +52,7 @@ main = do
       Nothing -> pure unit
     body <- awaitBody
     root <- runStoreT (S.initialStore session) S.reduce Router.component
-    io <- runUI root { initialRoute: HomeR, client, session } body
+    io <- runUI root { initialRoute: HomeR, client } body
     void $ liftEffect $ matchesWith (parse routeCodec)
       ( \mOld mnew ->
           when (mOld /= Just mnew) $ do

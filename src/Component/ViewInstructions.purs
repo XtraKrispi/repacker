@@ -238,9 +238,43 @@ renderMetadata author game instructions editLink = HH.div [ HP.class_ (H.ClassNa
   [ HH.div [ HP.class_ (H.ClassName "card-body") ]
       [ HH.div [ HP.class_ (H.ClassName "flex justify-between items-start gap-4") ]
           [ HH.div [ HP.class_ (H.ClassName "flex flex-col gap-1") ]
-              [ HH.h1 [ HP.class_ (H.ClassName "text-3xl font-bold text-primary") ]
-                  [ HH.text game.title
-                  , maybe (HH.text "") (\y -> HH.text (" (" <> show y <> ")")) game.yearPublished
+              [ HH.a
+                  [ HP.href ("https://boardgamegeek.com/boardgame/" <> unwrap game.bggId)
+                  , HP.target "_blank"
+                  , HP.class_ (H.ClassName "flex items-center gap-2 text-3xl font-bold text-primary hover:underline hover:underline-offset-8")
+                  ]
+                  [ HH.span []
+                      [ HH.text game.title
+                      , maybe (HH.text "") (\y -> HH.text (" (" <> show y <> ")")) game.yearPublished
+                      ]
+                  , Svg.svg
+                      [ SP.class_ (H.ClassName "size-6")
+                      , SP.fill NoColor
+                      , SP.viewBox 0.0 0.0 24.0 24.0
+                      , SP.stroke (Named "currentColor")
+                      ]
+                      [ Svg.path
+                          [ SP.strokeLineCap LineCapRound
+                          , SP.strokeLineJoin LineJoinRound
+                          , SP.strokeWidth 1.5
+                          , SP.d
+                              [ SP.m SP.Abs 13.5 6.0
+                              , SP.h SP.Abs 5.25
+                              , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 3.0 8.25
+                              , SP.v SP.Rel 10.5
+                              , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 5.25 21.0
+                              , SP.h SP.Rel 10.5
+                              , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 18.0 18.75
+                              , SP.v SP.Abs 10.5
+                              , SP.m SP.Rel (-10.5) 6.0
+                              , SP.l SP.Abs 21.0 3.0
+                              , SP.m SP.Rel 0.0 0.0
+                              , SP.h SP.Rel (-5.25)
+                              , SP.m SP.Abs 21.0 3.0
+                              , SP.v SP.Rel 5.25
+                              ]
+                          ]
+                      ]
                   ]
               , HH.p [ HP.class_ (H.ClassName "text-sm text-base-content/60") ]
                   [ HH.text $ "Packing guide by " <> extractAuthorName author ]
