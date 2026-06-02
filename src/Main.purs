@@ -51,7 +51,7 @@ main = do
       Just s -> void $ createProfileIfNotExists client s
       Nothing -> pure unit
     body <- awaitBody
-    root <- runStoreT S.initialStore S.reduce Router.component
+    root <- runStoreT (S.initialStore session) S.reduce Router.component
     io <- runUI root { initialRoute: HomeR, client, session } body
     void $ liftEffect $ matchesWith (parse routeCodec)
       ( \mOld mnew ->

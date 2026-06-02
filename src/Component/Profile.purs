@@ -15,9 +15,11 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (InputType(..))
 import Halogen.HTML.Properties as HP
+import Halogen.Store.Connect (Connected, connect)
 import Halogen.Store.Monad (class MonadStore)
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteData
+import Store (selectSession)
 import Store as S
 import Supabase (Client)
 import Supabase.Auth.Types (UserId)
@@ -26,7 +28,6 @@ import Web.Event.Event (Event, preventDefault)
 
 type CoreData =
   ( client :: Client
-  , session :: Maybe SessionInfo
   , userId :: UserId
   )
 
@@ -39,7 +40,7 @@ type State =
   , firstName :: String
   , lastName :: String
   , username :: String
-  , isReadOnly :: Boolean
+  , session :: Maybe SessionInfo
   | CoreData
   }
 
@@ -49,30 +50,35 @@ data Action
   | UpdateLastName String
   | UpdateUsername String
   | SaveProfile Event
+  | UpdateState (Maybe SessionInfo)
 
 component :: forall query output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => H.Component query Input output m
-component = H.mkComponent
+component = connect selectSession $ H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval
       { initialize = Just Initialize
       , handleAction = handleAction
+      , receive = receive
       }
   , render
   }
 
-initialState :: Input -> State
-initialState { client, userId, session } =
+initialState :: Connected (Maybe SessionInfo) Input -> State
+initialState { context, input: { client, userId } } =
   { client
   , userId
-  , session
+  , session: context
   , profile: NotAsked
   , firstName: ""
   , lastName: ""
   , username: ""
-  , isReadOnly: Just userId /= (_.userId <$> session)
   }
 
+receive :: Connected (Maybe SessionInfo) Input -> Maybe Action
+receive { context } = Just (UpdateState context)
+
 handleAction :: forall slots output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action slots output m Unit
+handleAction (UpdateState session) = modify_ _ { session = session }
 handleAction Initialize = do
   { userId, client } <- get
   modify_ _ { profile = Loading }
@@ -111,7 +117,7 @@ render state = HH.div [ HP.class_ (H.ClassName "max-w-md mx-auto w-full") ]
                 ]
               Failure err -> HH.div [ HP.class_ (H.ClassName "alert alert-error") ]
                 [ HH.span_ [ HH.text err ] ]
-              Success p | not state.isReadOnly -> renderForm state p
+              Success p | ((_.userId <$> state.session) == Just state.userId) -> renderForm state p
               Success p -> renderReadOnly p
           ]
       ]

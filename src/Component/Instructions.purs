@@ -49,7 +49,7 @@ import Web.HTML.HTMLInputElement (files, fromEventTarget)
 type CoreData =
   ( client :: Client
   , gameId :: GameId
-  , sessionInfo :: SessionInfo
+  , session :: SessionInfo
   , existingKey :: Maybe InstructionsKey
   )
 
@@ -133,13 +133,12 @@ component = H.mkComponent
   }
 
 initialState :: Input -> State
-initialState { client, gameId, sessionInfo, existingKey } =
+initialState { client, gameId, session, existingKey } =
   { client
   , gameId
-  , sessionInfo
+  , session
   , game: NotAsked
   , instructions: NotAsked
-
   , existingKey
   , images: empty
   }
@@ -147,7 +146,7 @@ initialState { client, gameId, sessionInfo, existingKey } =
 handleAction :: forall slots output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
   -- TODO: Deal with fetching data here
-  { gameId, existingKey, client } <- get
+  { gameId, existingKey, client, session } <- get
   modify_ \state -> state
     { game = Loading
     }
@@ -160,6 +159,7 @@ handleAction Initialize = do
         Nothing -> do
           addToast { message: "Instructions couldn't be found, redirecting back to game page", severity: S.Error }
           navigate (GameR gameId)
+        Just (userId /\ _) | userId /= session.userId -> navigate (ViewInstructionsR gameId key)
         Just (_userId /\ instructions) -> do
           images <- liftAff $ fetchImagesForInstructions client key
           modify_ _

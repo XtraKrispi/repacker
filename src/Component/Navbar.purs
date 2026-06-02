@@ -16,6 +16,8 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (InputType(..))
 import Halogen.HTML.Properties as HP
+import Halogen.Store.Connect (Connected, connect)
+import Halogen.Store.Monad (class MonadStore, updateStore)
 import Halogen.Svg.Attributes (Color(..))
 import Halogen.Svg.Attributes as SP
 import Halogen.Svg.Attributes.Path (CommandArcChoice(..), CommandPositionReference(..), CommandSweepChoice(..), a, h, l, m, v)
@@ -23,6 +25,8 @@ import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
 import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Route (Route(..), navigate)
+import Store (selectSession)
+import Store as S
 import Supabase (Client)
 import Supabase as Supabase
 import Supabase.Auth (UserEmail(..))
@@ -31,48 +35,57 @@ import Types (SessionInfo)
 
 type Slots = (search :: forall query. H.Slot query GameSearch.Output Int)
 _search = Proxy :: Proxy "search"
+
+type CoreData =
+  ( currentRoute :: Route
+  , client :: Client
+  )
+
 --TODO: Close the signup modal and provide feedback to user
 type State =
-  { currentRoute :: Route
+  { loginEmail :: String
   , session :: Maybe SessionInfo
-  , loginEmail :: String
-  , client :: Client
+  | CoreData
   }
 
 type Input =
-  { currentRoute :: Route
-  , client :: Client
-  , session :: Maybe SessionInfo
+  { | CoreData
   }
 
 data Action
   = GameSearchOutput GameSearch.Output
-  | UpdateState Input
+  | UpdateState (Maybe SessionInfo) Input
   | LoginClicked
   | SignInUser
   | LoginEmailUpdated String
   | LogOut
   | NavigateTo Route
 
-data Output = UserLoggedOut
-
-component :: forall query m. MonadAff m => MonadEffect m => H.Component query Input Output m
-component = H.mkComponent
+component
+  :: forall query output m
+   . MonadAff m
+  => MonadEffect m
+  => MonadStore S.Action S.Store m
+  => H.Component query Input output m
+component = connect selectSession $ H.mkComponent
   { initialState
-  , eval: H.mkEval H.defaultEval { handleAction = handleAction, receive = receive }
+  , eval: H.mkEval H.defaultEval
+      { handleAction = handleAction
+      , receive = receive
+      }
   , render
   }
 
-receive :: Input -> Maybe Action
-receive input = Just $ UpdateState input
+receive :: Connected (Maybe SessionInfo) Input -> Maybe Action
+receive { context, input } = Just $ UpdateState context input
 
-initialState :: Input -> State
-initialState { currentRoute, client } = { currentRoute, session: Nothing, loginEmail: "", client }
+initialState :: Connected (Maybe SessionInfo) Input -> State
+initialState { context, input: { currentRoute, client } } = { currentRoute, session: context, loginEmail: "", client }
 
-handleAction :: forall m. MonadAff m => MonadEffect m => Action -> H.HalogenM State Action Slots Output m Unit
+handleAction :: forall output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction (GameSearchOutput (GameSearch.GameSelected bg)) =
   navigate (GameR bg.bggId)
-handleAction (UpdateState input) = modify_ _ { currentRoute = input.currentRoute, session = input.session, client = input.client }
+handleAction (UpdateState session input) = modify_ _ { currentRoute = input.currentRoute, session = session, client = input.client }
 handleAction LoginClicked = liftEffect $ openModal "#signin-modal"
 handleAction SignInUser = do
   { loginEmail, client } <- get
@@ -85,7 +98,7 @@ handleAction (LoginEmailUpdated str) = modify_ _ { loginEmail = str }
 handleAction LogOut = do
   { client } <- get
   _ <- liftAff $ Supabase.signOut client
-  H.raise UserLoggedOut
+  updateStore S.LogoutUser
 handleAction (NavigateTo route) = do
   navigate route
 
