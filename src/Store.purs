@@ -7,8 +7,6 @@ import Data.Maybe (Maybe(..))
 import Halogen.Store.Select (Selector, selectEq)
 import Types (Key, SessionInfo)
 
--- TODO: Add session to the store... and wire up with receive so that we automatically update the views when the user logs in or out
-
 data ToastKey
 
 data Severity

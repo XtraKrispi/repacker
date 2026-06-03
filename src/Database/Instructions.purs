@@ -3,6 +3,7 @@ module Database.Instructions
   , newInstructions
   , fetchSingleInstructions
   , fetchImagesForInstructions
+  , updateInstructions
   , InstructionsSaveError(..)
   ) where
 
@@ -15,6 +16,7 @@ import Data.DateTime (DateTime)
 import Data.Either (Either(..))
 import Data.Filterable (filterMap)
 import Data.Foldable (foldr)
+import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap, wrap)
@@ -23,14 +25,16 @@ import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UUID (toString)
 import Effect.Aff (Aff, catchError)
-import Supabase (Client, StoragePath(..), Table, download, eq_, from, fromStorage, insert, maybeSingle, mkTable, run, select, upload)
+import Prim.RowList (class RowToList)
+import Supabase (Client, FilterBuilder, QueryBuilder, StoragePath(..), Table, download, eq_, from, fromStorage, insert, maybeSingle, mkTable, run, select, update, upload)
 import Supabase.Auth.Types (UserId)
 import Supabase.Storage (list)
 import Supabase.Types (BucketName(..))
 import Supabase.UUID (UUID)
-import Types (FileName, GameId, Image(..), Images, Instructions, InstructionsKey, Key(..), FileContents)
+import Types (FileContents, FileName, GameId, Image(..), Images, InstructionsKey, Key(..), Instructions)
 import Web.File.File (File)
 import Web.File.FileReader.Aff as FRA
+import Yoga.JSON (class ReadForeignFields)
 
 type DbInstructionsRow =
   ( id :: Int
@@ -79,8 +83,21 @@ downloadFile client key f = do
 
 data InstructionsSaveError = FailedToSave String | ImagesFailedToUpload (Array (Tuple FileName String))
 
-newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
-newInstructions client gameId instructionsKey instructions images = do
+saveInstructions
+  :: forall t99 t100 t147
+   . RowToList t100 t147
+  => ReadForeignFields t147 () t100
+  => ( { | DbInstructionsForInsertRow }
+       -> QueryBuilder DbInstructionsRow ()
+       -> FilterBuilder t99 t100
+     )
+  -> Client
+  -> GameId
+  -> InstructionsKey
+  -> Instructions
+  -> Map String Image
+  -> Aff (Either InstructionsSaveError Unit)
+saveInstructions operation client gameId instructionsKey instructions images = do
   let
     imagesToUpload =
       foldr
@@ -89,7 +106,7 @@ newInstructions client gameId instructionsKey instructions images = do
             _ -> toReturn
         )
         [] $ (Map.toUnfoldable images :: Array (FileName /\ Image))
-  results <- client # from instructionsTable # insert (toDbInstructions gameId instructionsKey instructions) # run
+  results <- client # from instructionsTable # operation (toDbInstructions gameId instructionsKey instructions) # run
   case results.error of
     Nothing -> do
       responses <- traverse (uploadStepImage client instructionsKey) imagesToUpload
@@ -99,6 +116,13 @@ newInstructions client gameId instructionsKey instructions images = do
       else
         pure $ Left $ ImagesFailedToUpload errors
     Just err -> pure $ Left $ FailedToSave err.message
+
+newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
+newInstructions = saveInstructions insert
+
+-- TODO: Here
+updateInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
+updateInstructions = saveInstructions update
 
 uploadStepImage :: Client -> InstructionsKey -> Tuple FileName File -> Aff (Tuple FileName (Maybe String))
 uploadStepImage client instructionsKey (fileName /\ file) = do

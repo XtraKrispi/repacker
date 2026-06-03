@@ -145,7 +145,6 @@ initialState { client, gameId, session, existingKey } =
 
 handleAction :: forall slots output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
-  -- TODO: Deal with fetching data here
   { gameId, existingKey, client, session } <- get
   modify_ \state -> state
     { game = Loading
@@ -273,13 +272,19 @@ handleAction (Save evt) = do
   liftEffect $ preventDefault evt
   state <- get
   if null (validate state) then do
-    case state.existingKey of
-      Just _key -> do
-        -- TODO: Deal with updating stuff here
-        pure unit
-      Nothing -> do
-        case state.instructions of
-          Success instructions -> do
+    case state.instructions of
+      Success instructions -> do
+        case state.existingKey of
+          Just key -> do
+            results <- liftAff $ Database.updateInstructions state.client key instructions state.images
+            case results of
+              Right _ -> addToast { message: "Instructions have been saved.", severity: S.Success }
+              Left _ -> addToast
+                { message: "There was a problem saving the instructions, please try again."
+                , severity: S.Error
+                }
+          Nothing -> do
+
             newKey <- wrap <$> liftEffect genUUID
             results <- liftAff $ Database.newInstructions state.client state.gameId newKey instructions state.images
             case results of
@@ -295,7 +300,7 @@ handleAction (Save evt) = do
                   , severity: S.Error
                   }
 
-          _ -> pure unit
+      _ -> pure unit
   else
     pure unit
 
