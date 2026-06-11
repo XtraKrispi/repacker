@@ -120,7 +120,6 @@ saveInstructions operation client gameId instructionsKey instructions images = d
 newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
 newInstructions = saveInstructions insert
 
--- TODO: Here
 updateInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
 updateInstructions = saveInstructions update
 
@@ -138,7 +137,6 @@ uploadStepImage client instructionsKey (fileName /\ file) = do
           file
           { upsert: true }
           (fromStorage (BucketName "images") client)
-
     )
     -- TODO: There is a bug where the response from supabase doesn't match what's expected
     -- We'll suppress the errors for now

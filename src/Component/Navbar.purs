@@ -4,12 +4,13 @@ import Prelude
 
 import Component.GameSearch (Size(..))
 import Component.GameSearch as GameSearch
+import Component.Helpers (addToast)
 import DOM.HTML.Indexed.FormMethod as Method
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
-import FFI.Dialog (openModal)
+import FFI.Dialog (close, openModal)
 import Halogen (get, modify_)
 import Halogen as H
 import Halogen.HTML as HH
@@ -27,6 +28,7 @@ import Halogen.Svg.Elements as Svg
 import Route (Route(..), navigate)
 import Store (selectSession)
 import Store as S
+import Store as Store
 import Supabase (Client)
 import Supabase as Supabase
 import Supabase.Auth (UserEmail(..))
@@ -90,10 +92,11 @@ handleAction LoginClicked = liftEffect $ openModal "#signin-modal"
 handleAction SignInUser = do
   { loginEmail, client } <- get
   results <- liftAff $ Supabase.sendOtpToEmail { email: UserEmail loginEmail } client
-  -- Close the modal, display a toast?
   case results.error of
-    Just _err -> pure unit
-    Nothing -> pure unit
+    Just _err -> addToast { message: "There was a problem signing in. Please try again.", severity: Store.Error }
+    Nothing -> do
+      addToast { message: "Please check your email for your signin link.", severity: Store.Info }
+      liftEffect $ close "#signin-modal"
 handleAction (LoginEmailUpdated str) = modify_ _ { loginEmail = str }
 handleAction LogOut = do
   { client } <- get
