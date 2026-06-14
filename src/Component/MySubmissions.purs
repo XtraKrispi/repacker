@@ -3,9 +3,13 @@ module Component.MySubmissions where
 import Prelude
 
 import Bgg (bggThings)
-import Data.Array (catMaybes, find, length)
+import Data.Array (catMaybes, find, length, nub)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Foldable (foldr)
+import Data.Map (Map)
+import Data.Map as Map
+import Data.Maybe (Maybe(..), maybe)
+import Data.Tuple (Tuple(..))
 import Database.Instructions (fetchUserInstructions)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
@@ -22,7 +26,7 @@ import Network.RemoteData (RemoteData(..))
 import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
 import Supabase (Client)
-import Types (GameId, Instructions, InstructionsKey, SessionInfo, BoardGame)
+import Types (BoardGame, GameId, InstructionsResult, SessionInfo)
 
 -- TODO: Plumb this through
 
@@ -30,13 +34,15 @@ type CoreData = (client :: Client, session :: SessionInfo)
 
 type Input = { | CoreData }
 
-type InstructionsData = { gameId :: GameId, game :: BoardGame, key :: InstructionsKey, instructions :: Instructions }
+type RawInstructionsData = { gameId :: GameId, game :: BoardGame | InstructionsResult }
+
+type InstructionsData = { gameId :: GameId, game :: BoardGame, instructions :: Array { | InstructionsResult } }
 
 type State = { instructions :: RemoteData String (Array InstructionsData) | CoreData }
 
 data Action = Initialize
 
--- TODO: Add paging here (max page size = 20)
+-- TODO: Add paging here (max page size = 20) -> Page based on board games, not instructions
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -53,7 +59,7 @@ handleAction Initialize = do
   state <- get
   modify_ _ { instructions = Loading }
   results <- liftAff $ fetchUserInstructions state.client state.session.userId
-  let gameIds = _.gameId <$> results
+  let gameIds = nub $ _.gameId <$> results
   things <- liftAff $ bggThings gameIds
   case things of
     Left err -> modify_ _ { instructions = Failure err }
@@ -61,13 +67,18 @@ handleAction Initialize = do
       let
         instructionsWithGame =
           catMaybes $ (\{ gameId, key, instructions } -> (\game -> { gameId, game, key, instructions }) <$> find (\thing -> thing.bggId == gameId) t) <$> results
-      modify_ _ { instructions = Success instructionsWithGame }
+      modify_ _ { instructions = Success (extractData $ buildMap instructionsWithGame) }
+  where
+  buildMap :: Array RawInstructionsData -> Map { gameId :: GameId, game :: BoardGame } (Array { | InstructionsResult })
+  buildMap d = foldr (\{ gameId, game, key, instructions } -> Map.insertWith (<>) { gameId, game } [ { key, instructions } ]) Map.empty d
+
+  extractData :: Map { gameId :: GameId, game :: BoardGame } (Array { | InstructionsResult }) -> Array InstructionsData
+  extractData m = (\(Tuple { gameId, game } v) -> { gameId, game, instructions: v }) <$> Map.toUnfoldable m
 
 render :: forall slots m. MonadEffect m => MonadAff m => State -> H.ComponentHTML Action slots m
 render state =
   HH.div [ HP.class_ (H.ClassName "max-w-md mx-auto w-full") ]
-    [ renderInstructions state.instructions
-    ]
+    [ renderInstructions state.instructions ]
 
 renderInstructions :: forall action slots m. MonadAff m => MonadEffect m => RemoteData String (Array InstructionsData) -> HH.ComponentHTML action slots m
 renderInstructions (Success []) = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ]
@@ -109,7 +120,7 @@ renderInstructions (Success xs) = HH.div [ HP.class_ (H.ClassName "flex flex-col
           [ HH.text "My Packing Guides" ]
       ]
   , HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
-      $ renderInstructionCard <$> xs
+      $ renderGameCard <$> xs
   ]
 renderInstructions Loading = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ]
   [ HH.span [ HP.class_ (H.ClassName "loading loading-spinner loading-lg") ] []
@@ -117,8 +128,21 @@ renderInstructions Loading = HH.div [ HP.class_ (H.ClassName "flex justify-cente
   ]
 renderInstructions _ = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
 
-renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => InstructionsData -> HH.ComponentHTML action slots m
-renderInstructionCard { gameId, key, instructions } =
+renderGameCard :: forall action slots m. MonadAff m => MonadEffect m => InstructionsData -> HH.ComponentHTML action slots m
+renderGameCard { gameId, game, instructions } = HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
+  [ HH.div [ HP.class_ (H.ClassName "card-body") ]
+      [ HH.div [ HP.class_ (H.ClassName "flex gap-4 text-2xl items-center card-title ") ]
+          [ HH.img [ HP.class_ (H.ClassName "rounded-full h-12 w-12"), HP.src game.thumbnailUrl ]
+          , HH.span [] [ HH.text $ game.title <> maybe "" (\y -> " (" <> show y <> ")") game.yearPublished ]
+          ]
+      , HH.div [ HP.class_ (H.ClassName "divider") ] []
+      , HH.div [] $ renderInstructionCard gameId <$> instructions
+      ]
+
+  ]
+
+renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => GameId -> { | InstructionsResult } -> HH.ComponentHTML action slots m
+renderInstructionCard gameId { key, instructions } =
   let
     viewBtn = HH.a
       [ HP.class_ (H.ClassName "btn btn-sm btn-primary")
@@ -132,10 +156,13 @@ renderInstructionCard { gameId, key, instructions } =
       [ HH.text "Edit" ]
   in
     HH.div
-      [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
-      [ HH.div [ HP.class_ (H.ClassName "card-body") ]
+      []
+      [ HH.div []
           [ HH.h3 [ HP.class_ (H.ClassName "card-title text-secondary") ]
-              [ HH.text instructions.description ]
+              [ HH.div [ HP.class_ (H.ClassName "flex flex-col gap-2 w-full") ]
+                  [ HH.span [] [ HH.text instructions.description ]
+                  ]
+              ]
           , HH.div [ HP.class_ (H.ClassName "flex gap-2 flex-wrap mt-2") ]
               [ HH.span [ HP.class_ (H.ClassName "badge badge-ghost") ]
                   [ HH.text $ show (length instructions.steps) <> " step" <> if length instructions.steps == 1 then "" else "s" ]

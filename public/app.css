@@ -2300,6 +2300,9 @@
   .rounded-field {
     border-radius: var(--radius-field);
   }
+  .rounded-full {
+    border-radius: calc(infinity * 1px);
+  }
   .rounded-lg {
     border-radius: var(--radius-lg);
   }
