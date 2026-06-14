@@ -9,8 +9,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
-import Data.Tuple as Tuple
-import Data.Tuple.Nested (type (/\), (/\))
+import Data.Tuple.Nested ((/\))
 import Database.Instructions (fetchImagesForInstructions, fetchSingleInstructions)
 import Database.Profile (fetchProfile)
 import Effect.Aff.Class (class MonadAff, liftAff)
@@ -31,8 +30,7 @@ import Network.RemoteData as RemoteData
 import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
 import Supabase (Client)
-import Supabase.Auth.Types (UserId)
-import Types (BoardGame, FileContents, GameId, Image(..), Images, IncludedExpansions(..), Instructions, InstructionsKey, PackingStep, Profile, SessionInfo)
+import Types (BoardGame, FileContents, GameId, Image(..), Images, IncludedExpansions(..), Instructions, InstructionsKey, PackingStep, Profile, SessionInfo, InstructionsWithUser)
 
 type CoreData =
   ( client :: Client
@@ -51,7 +49,7 @@ derive instance eqViewMode :: Eq ViewMode
 
 type State =
   { game :: RemoteData String BoardGame
-  , instructions :: RemoteData String (UserId /\ Instructions)
+  , instructions :: RemoteData String InstructionsWithUser
   , authorProfile :: RemoteData String (Maybe Profile)
   , images :: Images
   , viewMode :: ViewMode
@@ -105,7 +103,7 @@ handleAction Initialize = do
   instructions <- liftAff $ fetchSingleInstructions client instructionsKey
   game <- liftAff $ bggThing gameId
   images <- liftAff $ fetchImagesForInstructions client instructionsKey
-  profile <- liftAff $ traverse (\(userId /\ _) -> fetchProfile client userId) instructions
+  profile <- liftAff $ traverse (\{ createdBy } -> fetchProfile client createdBy) instructions
 
   modify_ _
     { instructions = RemoteData.fromMaybe instructions
@@ -116,12 +114,12 @@ handleAction Initialize = do
 handleAction (SetViewMode mode) = modify_ _ { viewMode = mode, carouselIndex = 0 }
 handleAction NextSlide = modify_ \state ->
   let
-    total = length $ withDefault [] $ map (Tuple.snd >>> _.steps) state.instructions
+    total = length $ withDefault [] $ map (_.instructions >>> _.steps) state.instructions
   in
     state { carouselIndex = if state.carouselIndex + 1 >= total then 0 else state.carouselIndex + 1 }
 handleAction PrevSlide = modify_ \state ->
   let
-    total = length $ withDefault [] $ map (Tuple.snd >>> _.steps) state.instructions
+    total = length $ withDefault [] $ map (_.instructions >>> _.steps) state.instructions
   in
     state { carouselIndex = if state.carouselIndex <= 0 then total - 1 else state.carouselIndex - 1 }
 handleAction (GoToSlide i) = modify_ _ { carouselIndex = i }
@@ -130,8 +128,8 @@ handleAction CloseExpandedImage = modify_ _ { expandedImage = Nothing }
 
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
 render state = case state.game /\ state.instructions /\ state.authorProfile of
-  (Success game /\ Success (authorId /\ instructions) /\ Success author) -> HH.div [ HP.class_ (H.ClassName "flex flex-col gap-6 max-w-4xl mx-auto") ]
-    [ renderMetadata author game instructions (editLink authorId)
+  (Success game /\ Success { createdBy, instructions } /\ Success author) -> HH.div [ HP.class_ (H.ClassName "flex flex-col gap-6 max-w-4xl mx-auto") ]
+    [ renderMetadata author game instructions (editLink createdBy)
     , HH.div [ HP.class_ (H.ClassName "divider") ] []
     , renderStepsHeader state.viewMode (not $ null instructions.steps)
     , case state.viewMode of

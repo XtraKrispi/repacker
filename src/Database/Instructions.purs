@@ -4,6 +4,7 @@ module Database.Instructions
   , fetchSingleInstructions
   , fetchImagesForInstructions
   , updateInstructions
+  , fetchUserInstructions
   , InstructionsSaveError(..)
   ) where
 
@@ -31,10 +32,12 @@ import Supabase.Auth.Types (UserId)
 import Supabase.Storage (list)
 import Supabase.Types (BucketName(..))
 import Supabase.UUID (UUID)
-import Types (FileContents, FileName, GameId, Image(..), Images, InstructionsKey, Key(..), Instructions)
+import Types (FileContents, FileName, GameId, Image(..), Images, Instructions, InstructionsKey, InstructionsWithGame, InstructionsWithUser, Key(..), FullInstructions)
 import Web.File.File (File)
 import Web.File.FileReader.Aff as FRA
 import Yoga.JSON (class ReadForeignFields)
+
+-- TODO: Clean up the types so I don't have to marshal between them... look at how to leverage row types
 
 type DbInstructionsRow =
   ( id :: Int
@@ -52,19 +55,38 @@ type DbInstructionsForInsertRow =
 instructionsTable :: Table DbInstructionsRow () ()
 instructionsTable = mkTable "instructions"
 
-fetchInstructions :: Client -> GameId -> Aff (Array (UserId /\ InstructionsKey /\ Instructions))
+fetchInstructions :: Client -> GameId -> Aff (Array InstructionsWithUser)
 fetchInstructions client gameId = do
   results <- client
     # from instructionsTable
     # select
     # eq_ @"bgg_id" (unwrap gameId)
     # run
-  pure $ toInstructions <$> fromMaybe [] results.data
+  pure $ (extractData <<< toInstructions) <$> fromMaybe [] results.data
+  where
+  extractData { createdBy, key, instructions } = { createdBy, key, instructions }
 
-fetchSingleInstructions :: Client -> InstructionsKey -> Aff (Maybe (UserId /\ Instructions))
+fetchUserInstructions :: Client -> UserId -> Aff (Array InstructionsWithGame)
+fetchUserInstructions client userId = do
+  results <- client
+    # from instructionsTable
+    # select
+    # eq_ @"created_by" userId
+    # run
+  pure $ (extractData <<< toInstructions) <$> fromMaybe [] results.data
+  where
+  extractData { gameId, key, instructions } = { gameId, key, instructions }
+
+fetchSingleInstructions :: Client -> InstructionsKey -> Aff (Maybe InstructionsWithUser)
 fetchSingleInstructions client key = do
-  results <- _.data <$> (client # from instructionsTable # select # eq_ @"instructions_key" (wrap $ unwrap key) # maybeSingle)
-  pure $ (\(userId /\ _ /\ ins) -> userId /\ ins) <$> map toInstructions results
+  results <- _.data <$>
+    ( client
+        # from instructionsTable
+        # select
+        # eq_ @"instructions_key" (wrap $ unwrap key)
+        # maybeSingle
+    )
+  pure $ (\{ createdBy, instructions } -> { createdBy, key, instructions }) <$> map toInstructions results
 
 fetchImagesForInstructions :: Client -> InstructionsKey -> Aff Images
 fetchImagesForInstructions client key = do
@@ -150,5 +172,11 @@ toDbInstructions gameId instructionsKey instructions =
   , instructions_key: wrap $ unwrap instructionsKey
   }
 
-toInstructions :: { | DbInstructionsRow } -> UserId /\ InstructionsKey /\ Instructions
-toInstructions row = row.created_by /\ Key (unwrap row.instructions_key) /\ row.data
+toInstructions :: { | DbInstructionsRow } -> FullInstructions
+toInstructions row =
+  { createdBy: row.created_by
+  , gameId: wrap row.bgg_id
+  , key: Key (unwrap row.instructions_key)
+  , instructions: row.data
+  }
+

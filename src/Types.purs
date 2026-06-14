@@ -130,3 +130,14 @@ data Image
   | Downloaded FileContents
 
 type Images = Map FileName Image
+
+type InstructionsResult =
+  ( key :: InstructionsKey
+  , instructions :: Instructions
+  )
+
+type FullInstructions = { createdBy :: UserId, gameId :: GameId | InstructionsResult }
+
+type InstructionsWithUser = { createdBy :: UserId | InstructionsResult }
+
+type InstructionsWithGame = { gameId :: GameId | InstructionsResult }

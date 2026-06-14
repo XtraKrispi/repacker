@@ -1,4 +1,4 @@
-module Bgg (bggSearch, bggThing) where
+module Bgg (bggSearch, bggThing, bggThings) where
 
 import Prelude
 
@@ -7,18 +7,18 @@ import Affjax.RequestHeader (RequestHeader(..))
 import Affjax.ResponseFormat (document)
 import Affjax.Web (printError, request)
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
-import Data.Array (catMaybes)
+import Data.Array (catMaybes, head, intercalate)
 import Data.Either (Either(..), note)
 import Data.HTTP.Method as Http
 import Data.Int (fromString)
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
-import Data.Newtype (wrap)
+import Data.Newtype (unwrap, wrap)
 import Data.Traversable (sequence, traverse)
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
-import Types (BoardGame, BoardGameSummary, GameId(..))
+import Types (BoardGame, BoardGameSummary, GameId)
 import Web.DOM (Document)
 import Web.DOM.Document (toParentNode)
 import Web.DOM.Element (getAttribute)
@@ -46,7 +46,7 @@ bggThing :: GameId -> Aff (Either String BoardGame)
 bggThing gameId = do
   let
     req = defaultRequest
-      { url = thingUrl gameId
+      { url = thingUrl [ gameId ]
       , method = Left Http.GET
       , headers = [ RequestHeader "Authorization" ("Bearer " <> bggKey) ]
       , responseFormat = document
@@ -54,7 +54,21 @@ bggThing gameId = do
   resp <- request req
   case resp of
     Left err -> pure $ Left (printError err)
-    Right body -> note "There was a problem reading the XML" <$> liftEffect (thingParser body.body)
+    Right body -> note "There was a problem reading the XML" <$> liftEffect (head <$> thingParser body.body)
+
+bggThings :: Array GameId -> Aff (Either String (Array BoardGame))
+bggThings gameIds = do
+  let
+    req = defaultRequest
+      { url = thingUrl gameIds
+      , method = Left Http.GET
+      , headers = [ RequestHeader "Authorization" ("Bearer " <> bggKey) ]
+      , responseFormat = document
+      }
+  resp <- request req
+  case resp of
+    Left err -> pure $ Left (printError err)
+    Right body -> Right <$> liftEffect (thingParser body.body)
 
 bggKey :: String
 bggKey = "e6930218-35cd-4fd8-830f-05c987bae61b"
@@ -62,8 +76,8 @@ bggKey = "e6930218-35cd-4fd8-830f-05c987bae61b"
 searchUrl :: String -> String
 searchUrl search = "https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=" <> search
 
-thingUrl :: GameId -> String
-thingUrl (GameId gameId) = "https://boardgamegeek.com/xmlapi2/thing?type=boardgame&id=" <> gameId
+thingUrl :: Array GameId -> String
+thingUrl gameIds = "https://boardgamegeek.com/xmlapi2/thing?type=boardgame&id=" <> intercalate "," (unwrap <$> gameIds)
 
 searchParser :: Document -> Effect (Maybe (Array BoardGameSummary))
 searchParser doc = do
@@ -92,13 +106,12 @@ parseSearchNode node = do
 
     Nothing -> pure Nothing
 
-thingParser :: Document -> Effect (Maybe BoardGame)
+thingParser :: Document -> Effect (Array BoardGame)
 thingParser doc = do
   let parentNode = toParentNode doc
-  item <- querySelector (QuerySelector "item") parentNode
-  case item of
-    Just i -> parseThing i
-    Nothing -> pure Nothing
+  items <- querySelectorAll (QuerySelector "item") parentNode >>= toArray
+  results <- traverse parseThing (catMaybes $ WDE.fromNode <$> items)
+  pure $ catMaybes results
 
 parseThing :: WDE.Element -> Effect (Maybe BoardGame)
 parseThing element = do

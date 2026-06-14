@@ -158,8 +158,8 @@ handleAction Initialize = do
         Nothing -> do
           addToast { message: "Instructions couldn't be found, redirecting back to game page", severity: S.Error }
           navigate (GameR gameId)
-        Just (userId /\ _) | userId /= session.userId -> navigate (ViewInstructionsR gameId key)
-        Just (_userId /\ instructions) -> do
+        Just { createdBy } | createdBy /= session.userId -> navigate (ViewInstructionsR gameId key)
+        Just { instructions } -> do
           images <- liftAff $ fetchImagesForInstructions client key
           modify_ _
             { images = images

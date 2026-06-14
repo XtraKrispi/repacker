@@ -5,7 +5,6 @@ import Prelude
 import Bgg (bggThing)
 import Data.Array (length)
 import Data.Maybe (Maybe(..), maybe)
-import Data.Tuple.Nested (type (/\), (/\))
 import Database.Instructions (fetchInstructions)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
@@ -23,12 +22,12 @@ import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
 import Supabase (Client)
 import Supabase.Auth.Types (UserId)
-import Types (BoardGame, GameId, Instructions, InstructionsKey, SessionInfo)
+import Types (BoardGame, GameId, InstructionsWithUser, SessionInfo)
 
 type CoreData = (gameId :: GameId, client :: Client, session :: Maybe SessionInfo)
 type State =
   { game :: RemoteData String BoardGame
-  , instructions :: RemoteData String (Array (UserId /\ InstructionsKey /\ Instructions))
+  , instructions :: RemoteData String (Array InstructionsWithUser)
   | CoreData
   }
 
@@ -112,7 +111,7 @@ renderGameDetails (Failure err) = HH.div [ HP.class_ (H.ClassName "alert alert-e
   ]
 renderGameDetails NotAsked = HH.div [] []
 
-renderInstructions :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe SessionInfo -> RemoteData String (Array (UserId /\ InstructionsKey /\ Instructions)) -> HH.ComponentHTML action slots m
+renderInstructions :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe SessionInfo -> RemoteData String (Array InstructionsWithUser) -> HH.ComponentHTML action slots m
 renderInstructions gameId mUser (Success []) = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ]
   [ Svg.svg
       [ SP.class_ (H.ClassName "h-12 w-12 opacity-40")
@@ -176,8 +175,8 @@ renderInstructions _ _ Loading = HH.div [ HP.class_ (H.ClassName "flex justify-c
   ]
 renderInstructions _ _ _ = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
 
-renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe UserId -> (UserId /\ InstructionsKey /\ Instructions) -> HH.ComponentHTML action slots m
-renderInstructionCard gameId mViewerId (createdBy /\ key /\ instructions) =
+renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe UserId -> InstructionsWithUser -> HH.ComponentHTML action slots m
+renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
   let
     isOwner = mViewerId == Just createdBy
     viewBtn = HH.a
