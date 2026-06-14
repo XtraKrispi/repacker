@@ -43,7 +43,6 @@ type CoreData =
   , client :: Client
   )
 
---TODO: Close the signup modal and provide feedback to user
 type State =
   { loginEmail :: String
   , session :: Maybe SessionInfo
@@ -154,7 +153,10 @@ render state@{ currentRoute, session } =
                           HH.div [ HP.class_ (H.ClassName "dropdown dropdown-end") ]
                             [ HH.div [ HP.tabIndex 0, HP.attr (H.AttrName "role") "button", HP.class_ (H.ClassName "btn btn-ghost rounded-field") ] [ HH.text $ fromMaybe (unwrap s.email) s.name ]
                             , HH.ul [ HP.tabIndex (-1), HP.class_ (H.ClassName "menu dropdown-content bg-base-200 rounded-box z-1 mt-4 w-52 p-2 shadow-sm") ]
-                                [ HH.li_ [ HH.button_ [ HH.text "My Submissions" ] ]
+                                [ HH.li [ if currentRoute == MySubmissionsR then HP.class_ (H.ClassName "menu-active") else HP.style "" ]
+                                    [ HH.button [ HE.onClick (\_ -> NavigateTo MySubmissionsR) ]
+                                        [ HH.text "My Submissions" ]
+                                    ]
                                 , HH.li [ if currentRoute == ProfileR s.userId then HP.class_ (H.ClassName "menu-active") else HP.style "" ]
                                     [ HH.button [ HE.onClick (\_ -> NavigateTo (ProfileR s.userId)) ]
                                         [ HH.text "My Profile" ]

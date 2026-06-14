@@ -24,6 +24,7 @@ data Route
   | UpdateInstructionsR GameId InstructionsKey
   | ViewInstructionsR GameId InstructionsKey
   | ProfileR UserId
+  | MySubmissionsR
 
 derive instance genericRoute :: Generic Route _
 derive instance eqRoute :: Eq Route
@@ -39,6 +40,7 @@ routeCodec = default HomeR $ root $ G.sum
   , "UpdateInstructionsR": "game" D./ gameId segment D./ key segment
   , "ViewInstructionsR": "game" D./ gameId segment D./ "view" D./ key segment
   , "ProfileR": "profile" D./ userId segment
+  , "MySubmissionsR": "my-submissions" D./ G.noArgs
   }
 
 userId :: RouteDuplex' String -> RouteDuplex' UserId

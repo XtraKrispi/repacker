@@ -5,6 +5,7 @@ import Prelude
 import Component.Game as Game
 import Component.Home as Home
 import Component.Instructions as Instructions
+import Component.MySubmissions as MySubmissions
 import Component.Navbar as Navbar
 import Component.Profile as Profile
 import Component.Toast as Toast
@@ -117,6 +118,10 @@ render state = HH.div []
           UpdateInstructionsR gameId instructionsKey ->
             case state.session of
               Just s -> HH.slot_ _page ("update-instructions " <> unwrap gameId <> (toString (unwrap instructionsKey))) Instructions.component { client: state.client, gameId, session: s, existingKey: Just instructionsKey }
+              Nothing -> HH.div [] []
+          MySubmissionsR ->
+            case state.session of
+              Just s -> HH.slot_ _page "my-submissions" MySubmissions.component { client: state.client, session: s }
               Nothing -> HH.div [] []
           ViewInstructionsR gameId instructionsKey ->
             HH.slot_ _page ("view-instructions " <> unwrap gameId <> (toString (unwrap instructionsKey))) ViewInstructions.component { client: state.client, gameId, instructionsKey, session: state.session }

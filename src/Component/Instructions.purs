@@ -276,7 +276,7 @@ handleAction (Save evt) = do
       Success instructions -> do
         case state.existingKey of
           Just key -> do
-            results <- liftAff $ Database.updateInstructions state.client key instructions state.images
+            results <- liftAff $ Database.updateInstructions state.client state.gameId key instructions state.images
             case results of
               Right _ -> addToast { message: "Instructions have been saved.", severity: S.Success }
               Left _ -> addToast

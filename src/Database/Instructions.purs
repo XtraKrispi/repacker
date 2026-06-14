@@ -120,6 +120,7 @@ saveInstructions operation client gameId instructionsKey instructions images = d
 newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
 newInstructions = saveInstructions insert
 
+-- TODO: Test this
 updateInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
 updateInstructions = saveInstructions update
 
