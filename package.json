@@ -4,7 +4,7 @@
   "scripts": {
     "tailwind:dev": "npx @tailwindcss/cli -i ./src/input.css -o ./public/app.css --watch",
     "server:dev": "npx parcel index.html public/**/*.png",
-    "build": "npx parcel build index.html public/**/*.png"
+    "build": "npx parcel build index.html public/**/*.png --public-url ./"
   },
   "keywords": [],
   "author": "",

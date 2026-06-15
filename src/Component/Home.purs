@@ -51,7 +51,7 @@ render _ = HH.div [ HP.class_ (H.ClassName "pt-24 flex flex-col gap-6") ]
       , HH.div_
           [ HH.img
               [ HP.class_ (H.ClassName "h-64 rounded-xl drop-shadow-xl")
-              , HP.src "/public/home-top-right.png"
+              , HP.src "home-top-right.png"
               ]
           ]
       ]
