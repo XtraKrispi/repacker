@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "tailwind:dev": "npx @tailwindcss/cli -i ./src/input.css -o ./public/app.css --watch",
-    "server:dev": "npx parcel index.html public/**/*.png"
+    "server:dev": "npx parcel index.html public/**/*.png",
+    "build": "npx parcel build index.html public/**/*.png"
   },
   "keywords": [],
   "author": "",
