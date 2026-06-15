@@ -3,12 +3,11 @@ module Component.MySubmissions where
 import Prelude
 
 import Bgg (bggThings)
-import Data.Array (drop, filter, length, nub, null, range, take)
+import Data.Array (drop, filter, length, nub, take)
 import Data.Either (Either(..))
 import Data.Int (ceil, toNumber)
 import Data.Maybe (Maybe(..), maybe)
 import Database.Instructions (fetchUserInstructions)
-import Debug (trace)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
 import Halogen (get, modify_)
@@ -26,8 +25,6 @@ import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
 import Supabase (Client)
 import Types (BoardGame, GameId, InstructionsResult, SessionInfo, InstructionsWithGame)
-
--- TODO: Plumb this through
 
 type CoreData = (client :: Client, session :: SessionInfo)
 
@@ -50,8 +47,6 @@ type State =
 data Action
   = Initialize
   | ChangePage Int
-
--- TODO: Add paging here (max page size = 20) -> Page based on board games, not instructions
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -214,7 +209,7 @@ pager state =
     lastPage = ceil $ toNumber state.total / toNumber state.pageSize
   in
     HH.div [ HP.class_ (H.ClassName "flex justify-between items-center mb-4 text-xs") ]
-      [ HH.div [] [ HH.text $ "Showing " <> show (startingRecord + 1) <> " to " <> show endingRecord <> " of " <> show state.total <> " results" ]
+      [ HH.div [] [ HH.text $ "Showing " <> show (startingRecord + 1) <> " to " <> show endingRecord <> " of " <> show state.total <> " games" ]
       , HH.div [ HP.class_ (H.ClassName "flex gap-2 items-center") ]
           [ HH.button [ HE.onClick (\_ -> ChangePage (state.pageNumber - 1)), HP.class_ (H.ClassName "btn btn-secondary btn-outline"), HP.disabled (state.pageNumber == 0) ] [ HH.text "← Previous" ]
           , HH.button [ HE.onClick (\_ -> ChangePage (state.pageNumber + 1)), HP.class_ (H.ClassName "btn btn-secondary btn-outline"), HP.disabled (state.pageNumber == (lastPage - 1)) ] [ HH.text "Next →" ]
