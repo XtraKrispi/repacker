@@ -63,7 +63,7 @@ render { gameId, game, instructions, session } = HH.div [ HP.class_ (H.ClassName
 renderGameDetails :: forall action slots m. MonadAff m => MonadEffect m => RemoteData String BoardGame -> H.ComponentHTML action slots m
 renderGameDetails (Success game) = HH.div
   [ HP.class_ (H.ClassName "hero min-h-72 rounded-2xl drop-shadow-xl")
-  , HP.style ("background-image: url('" <> game.imageUrl <> "')")
+  , HP.style ("background-image:url('" <> game.imageUrl <> "')")
   ]
   [ HH.div [ HP.class_ (H.ClassName "hero-overlay rounded-2xl") ] []
   , HH.div [ HP.class_ (H.ClassName "hero-content text-neutral-content text-center") ]
