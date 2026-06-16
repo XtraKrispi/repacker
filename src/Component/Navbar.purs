@@ -95,7 +95,7 @@ handleAction SignInUser = do
   results <- liftAff $ FFI.sendOtpToEmailWithRedirect
     { email: UserEmail loginEmail
     , redirectTo: case environment of
-        Production -> Nothing
+        Production -> Just "https://xtrakrispi.github.io/repacker/"
         Development -> Just "http://localhost:1234"
     }
     client
