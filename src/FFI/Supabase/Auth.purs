@@ -4,7 +4,6 @@ import Prelude
 
 import Control.Promise (Promise)
 import Control.Promise as Promise
-import Data.Maybe (Maybe(..))
 import Data.Nullable (Nullable)
 import Data.Nullable as Nullable
 import Effect.Aff (Aff)
@@ -32,10 +31,6 @@ convertResponse { data: d, error: err } =
 
 foreign import signInWithOtpImpl :: EffectFn2 Client Foreign (Promise InternalAuthResponse)
 
-sendOtpToEmailWithRedirect :: { email :: UserEmail, redirectTo :: Maybe String } -> Client -> Aff AuthResponse
-sendOtpToEmailWithRedirect { email: UserEmail email, redirectTo } client = do
-  let
-    opts = case redirectTo of
-      Just url -> write { email, options: { emailRedirectTo: url } }
-      Nothing -> write { email }
-  runEffectFn2 signInWithOtpImpl client opts # Promise.toAffE <#> convertResponse
+sendOtpToEmailWithRedirect :: { email :: UserEmail, redirectTo :: String } -> Client -> Aff AuthResponse
+sendOtpToEmailWithRedirect { email: UserEmail email, redirectTo } client =
+  runEffectFn2 signInWithOtpImpl client (write { email, options: { emailRedirectTo: redirectTo } }) # Promise.toAffE <#> convertResponse
