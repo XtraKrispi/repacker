@@ -141,3 +141,11 @@ type FullInstructions = { createdBy :: UserId, gameId :: GameId | InstructionsRe
 type InstructionsWithUser = { createdBy :: UserId | InstructionsResult }
 
 type InstructionsWithGame = { gameId :: GameId | InstructionsResult }
+
+data Environment = Development | Production
+
+derive instance Eq Environment
+derive instance Generic Environment _
+
+instance Show Environment where
+  show = genericShow

@@ -9,6 +9,7 @@ import Effect (Effect)
 import Effect.Aff (launchAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
+import FFI.Env (environment)
 import FFI.Supabase.Client (createClientWithPasskey)
 import Foreign (Foreign)
 import Halogen.Aff (awaitBody, runHalogenAff)
@@ -51,7 +52,7 @@ main = do
       Just s -> void $ createProfileIfNotExists client s
       Nothing -> pure unit
     body <- awaitBody
-    root <- runStoreT (S.initialStore session) S.reduce Router.component
+    root <- runStoreT (S.initialStore environment session) S.reduce Router.component
     io <- runUI root { initialRoute: HomeR, client } body
     void $ liftEffect $ matchesWith (parse routeCodec)
       ( \mOld mnew ->

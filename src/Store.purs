@@ -5,7 +5,7 @@ import Prelude
 import Data.Array (filter)
 import Data.Maybe (Maybe(..))
 import Halogen.Store.Select (Selector, selectEq)
-import Types (Key, SessionInfo)
+import Types (Environment, Key, SessionInfo)
 
 data ToastKey
 
@@ -27,12 +27,14 @@ type ToastMessageR =
 type Store =
   { toasts :: Array Toast
   , session :: Maybe SessionInfo
+  , environment :: Environment
   }
 
-initialStore :: Maybe SessionInfo -> Store
-initialStore session =
+initialStore :: Environment -> Maybe SessionInfo -> Store
+initialStore environment session =
   { toasts: []
   , session
+  , environment
   }
 
 data Action
@@ -49,3 +51,6 @@ reduce store LogoutUser = store { session = Nothing }
 
 selectSession :: Selector Store (Maybe SessionInfo)
 selectSession = selectEq _.session
+
+selectSessionAndEnvironment :: Selector Store { session :: Maybe SessionInfo, environment :: Environment }
+selectSessionAndEnvironment = selectEq (\store -> { session: store.session, environment: store.environment })

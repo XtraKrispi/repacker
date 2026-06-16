@@ -11,6 +11,7 @@ import Data.Newtype (unwrap)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import FFI.Dialog (close, openModal)
+import FFI.Supabase.Auth as FFI
 import Halogen (get, modify_)
 import Halogen as H
 import Halogen.HTML as HH
@@ -26,14 +27,14 @@ import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
 import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Route (Route(..), navigate)
-import Store (selectSession)
+import Store (selectSessionAndEnvironment)
 import Store as S
 import Store as Store
 import Supabase (Client)
 import Supabase as Supabase
 import Supabase.Auth (UserEmail(..))
 import Type.Proxy (Proxy(..))
-import Types (SessionInfo)
+import Types (Environment(..), SessionInfo)
 
 type Slots = (search :: forall query. H.Slot query GameSearch.Output Int)
 _search = Proxy :: Proxy "search"
@@ -46,6 +47,7 @@ type CoreData =
 type State =
   { loginEmail :: String
   , session :: Maybe SessionInfo
+  , environment :: Environment
   | CoreData
   }
 
@@ -55,7 +57,7 @@ type Input =
 
 data Action
   = GameSearchOutput GameSearch.Output
-  | UpdateState (Maybe SessionInfo) Input
+  | UpdateState { session :: Maybe SessionInfo, environment :: Environment } Input
   | LoginClicked
   | SignInUser
   | LoginEmailUpdated String
@@ -68,7 +70,7 @@ component
   => MonadEffect m
   => MonadStore S.Action S.Store m
   => H.Component query Input output m
-component = connect selectSession $ H.mkComponent
+component = connect selectSessionAndEnvironment $ H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval
       { handleAction = handleAction
@@ -77,20 +79,26 @@ component = connect selectSession $ H.mkComponent
   , render
   }
 
-receive :: Connected (Maybe SessionInfo) Input -> Maybe Action
+receive :: Connected { session :: Maybe SessionInfo, environment :: Environment } Input -> Maybe Action
 receive { context, input } = Just $ UpdateState context input
 
-initialState :: Connected (Maybe SessionInfo) Input -> State
-initialState { context, input: { currentRoute, client } } = { currentRoute, session: context, loginEmail: "", client }
+initialState :: Connected { session :: Maybe SessionInfo, environment :: Environment } Input -> State
+initialState { context, input: { currentRoute, client } } = { currentRoute, session: context.session, environment: context.environment, loginEmail: "", client }
 
 handleAction :: forall output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction (GameSearchOutput (GameSearch.GameSelected bg)) =
   navigate (GameR bg.bggId)
-handleAction (UpdateState session input) = modify_ _ { currentRoute = input.currentRoute, session = session, client = input.client }
+handleAction (UpdateState { session, environment } input) = modify_ _ { currentRoute = input.currentRoute, session = session, environment = environment, client = input.client }
 handleAction LoginClicked = liftEffect $ openModal "#signin-modal"
 handleAction SignInUser = do
-  { loginEmail, client } <- get
-  results <- liftAff $ Supabase.sendOtpToEmail { email: UserEmail loginEmail } client
+  { loginEmail, client, environment } <- get
+  results <- liftAff $ FFI.sendOtpToEmailWithRedirect
+    { email: UserEmail loginEmail
+    , redirectTo: case environment of
+        Production -> Nothing
+        Development -> Just "http://localhost:1234"
+    }
+    client
   case results.error of
     Just _err -> addToast { message: "There was a problem signing in. Please try again.", severity: Store.Error }
     Nothing -> do

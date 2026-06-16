@@ -1,0 +1,1 @@
+export const signInWithOtpImpl = (client, opts) => client.auth.signInWithOtp(opts);
