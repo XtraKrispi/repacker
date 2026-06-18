@@ -11,10 +11,10 @@ module Database.Instructions
 import Prelude
 
 import Control.Parallel (parTraverse)
-import Data.Array (catMaybes, cons, null)
+import Data.Array (catMaybes, cons, filter, null)
 import Data.Bifunctor (rmap)
 import Data.DateTime (DateTime)
-import Data.Either (Either(..))
+import Data.Either (Either(..), hush)
 import Data.Filterable (filterMap)
 import Data.Foldable (foldr)
 import Data.Map (Map)
@@ -26,6 +26,7 @@ import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UUID (toString)
 import Effect.Aff (Aff, catchError)
+import Foreign (Foreign)
 import Prim.RowList (class RowToList)
 import Supabase (Client, FilterBuilder, QueryBuilder, StoragePath(..), Table, download, eq_, from, fromStorage, insert, maybeSingle, mkTable, run, select, update, upload)
 import Supabase.Auth.Types (UserId)
@@ -35,7 +36,7 @@ import Supabase.UUID (UUID)
 import Types (FileContents, FileName, GameId, Image(..), Images, Instructions, InstructionsKey, InstructionsWithGame, InstructionsWithUser, Key(..), FullInstructions)
 import Web.File.File (File)
 import Web.File.FileReader.Aff as FRA
-import Yoga.JSON (class ReadForeignFields)
+import Yoga.JSON (class ReadForeignFields, read, write)
 
 -- TODO: Clean up the types so I don't have to marshal between them... look at how to leverage row types
 
@@ -48,21 +49,32 @@ type DbInstructionsRow =
 
 type DbInstructionsForInsertRow =
   ( bgg_id :: String
-  , data :: Instructions
+  , data :: Foreign
   , instructions_key :: UUID
+  , is_private :: Boolean
   )
 
 instructionsTable :: Table DbInstructionsRow () ()
 instructionsTable = mkTable "instructions"
 
-fetchInstructions :: Client -> GameId -> Aff (Array InstructionsWithUser)
-fetchInstructions client gameId = do
+isVisible :: Maybe UserId -> { | DbInstructionsRow } -> Boolean
+isVisible userId x = (Just x.created_by == userId && x.is_private) || (not x.is_private)
+
+fetchInstructions :: Client -> Maybe UserId -> GameId -> Aff (Array InstructionsWithUser)
+fetchInstructions client userId gameId = do
+  -- TODO: We need to patch the original library for this to work properly
+  -- let
+  --   -- (userId == userId AND private) OR (not private)
+  --   privacyFilter = case userId of
+  --     Just u -> or (NEA.singleton (eqC @"created_by" u))
+  --     Nothing -> ?todo
   results <- client
     # from instructionsTable
     # select
     # eq_ @"bgg_id" (unwrap gameId)
     # run
-  pure $ (extractData <<< toInstructions) <$> fromMaybe [] results.data
+  -- TODO: Filter on the client, but this isn't ideal (see above)
+  pure $ catMaybes $ (map extractData <<< toInstructions) <$> filter (isVisible userId) (fromMaybe [] results.data)
   where
   extractData { createdBy, key, instructions } = { createdBy, key, instructions }
 
@@ -73,12 +85,12 @@ fetchUserInstructions client userId = do
     # select
     # eq_ @"created_by" userId
     # run
-  pure $ (extractData <<< toInstructions) <$> fromMaybe [] results.data
+  pure $ catMaybes $ (map extractData <<< toInstructions) <$> fromMaybe [] results.data
   where
   extractData { gameId, key, instructions } = { gameId, key, instructions }
 
-fetchSingleInstructions :: Client -> InstructionsKey -> Aff (Maybe InstructionsWithUser)
-fetchSingleInstructions client key = do
+fetchSingleInstructions :: Client -> Maybe UserId -> InstructionsKey -> Aff (Maybe InstructionsWithUser)
+fetchSingleInstructions client userId key = do
   results <- _.data <$>
     ( client
         # from instructionsTable
@@ -86,7 +98,11 @@ fetchSingleInstructions client key = do
         # eq_ @"instructions_key" (wrap $ unwrap key)
         # maybeSingle
     )
-  pure $ (\{ createdBy, instructions } -> { createdBy, key, instructions }) <$> map toInstructions results
+  pure $ (\{ createdBy, instructions } -> { createdBy, key, instructions }) <$>
+    ( results
+        >>= (\x -> if isVisible userId x then Just x else Nothing)
+        >>= toInstructions
+    )
 
 fetchImagesForInstructions :: Client -> InstructionsKey -> Aff Images
 fetchImagesForInstructions client key = do
@@ -115,11 +131,12 @@ saveInstructions
      )
   -> Client
   -> GameId
+  -> Boolean
   -> InstructionsKey
   -> Instructions
   -> Map String Image
   -> Aff (Either InstructionsSaveError Unit)
-saveInstructions operation client gameId instructionsKey instructions images = do
+saveInstructions operation client gameId isPrivate instructionsKey instructions images = do
   let
     imagesToUpload =
       foldr
@@ -128,7 +145,7 @@ saveInstructions operation client gameId instructionsKey instructions images = d
             _ -> toReturn
         )
         [] $ (Map.toUnfoldable images :: Array (FileName /\ Image))
-  results <- client # from instructionsTable # operation (toDbInstructions gameId instructionsKey instructions) # run
+  results <- client # from instructionsTable # operation (toDbInstructions gameId isPrivate instructionsKey instructions) # run
   case results.error of
     Nothing -> do
       responses <- traverse (uploadStepImage client instructionsKey) imagesToUpload
@@ -139,11 +156,11 @@ saveInstructions operation client gameId instructionsKey instructions images = d
         pure $ Left $ ImagesFailedToUpload errors
     Just err -> pure $ Left $ FailedToSave err.message
 
-newInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
+newInstructions :: Client -> GameId -> Boolean -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
 newInstructions = saveInstructions insert
 
 -- TODO: Test this
-updateInstructions :: Client -> GameId -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
+updateInstructions :: Client -> GameId -> Boolean -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
 updateInstructions = saveInstructions update
 
 uploadStepImage :: Client -> InstructionsKey -> Tuple FileName File -> Aff (Tuple FileName (Maybe String))
@@ -165,18 +182,23 @@ uploadStepImage client instructionsKey (fileName /\ file) = do
     -- We'll suppress the errors for now
     (\_err -> pure $ fileName /\ Nothing)
 
-toDbInstructions :: GameId -> InstructionsKey -> Instructions -> { | DbInstructionsForInsertRow }
-toDbInstructions gameId instructionsKey instructions =
+toDbInstructions :: GameId -> Boolean -> InstructionsKey -> Instructions -> { | DbInstructionsForInsertRow }
+toDbInstructions gameId isPrivate instructionsKey instructions =
   { bgg_id: unwrap gameId
-  , data: instructions
+  , data: write instructions
   , instructions_key: wrap $ unwrap instructionsKey
+  , is_private: isPrivate
   }
 
-toInstructions :: { | DbInstructionsRow } -> FullInstructions
+toInstructions :: { | DbInstructionsRow } -> Maybe FullInstructions
 toInstructions row =
-  { createdBy: row.created_by
-  , gameId: wrap row.bgg_id
-  , key: Key (unwrap row.instructions_key)
-  , instructions: row.data
-  }
+  ( { createdBy: row.created_by
+    , gameId: wrap row.bgg_id
+    , key: Key (unwrap row.instructions_key)
+    , instructions: _
+    }
+  ) <$> deserializeInstructions row.data
+
+deserializeInstructions :: Foreign -> Maybe Instructions
+deserializeInstructions obj = hush $ read obj
 

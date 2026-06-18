@@ -94,17 +94,16 @@ initialState { client, gameId, instructionsKey, session } =
 
 handleAction :: forall slots output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
-  { client, instructionsKey, gameId } <- get
+  { client, instructionsKey, gameId, session } <- get
   modify_ _
     { instructions = Loading
     , game = Loading
     , authorProfile = Loading
     }
-  instructions <- liftAff $ fetchSingleInstructions client instructionsKey
+  instructions <- liftAff $ fetchSingleInstructions client (_.userId <$> session) instructionsKey
   game <- liftAff $ bggThing gameId
   images <- liftAff $ fetchImagesForInstructions client instructionsKey
   profile <- liftAff $ traverse (\{ createdBy } -> fetchProfile client createdBy) instructions
-
   modify_ _
     { instructions = RemoteData.fromMaybe instructions
     , game = RemoteData.fromEither game

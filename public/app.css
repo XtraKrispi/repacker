@@ -3086,6 +3086,9 @@
   .w-52 {
     width: calc(var(--spacing) * 52);
   }
+  .w-64 {
+    width: calc(var(--spacing) * 64);
+  }
   .w-80 {
     width: calc(var(--spacing) * 80);
   }
@@ -3524,6 +3527,9 @@
       }
     }
   }
+  .text-accent {
+    color: var(--color-accent);
+  }
   .text-base-content {
     color: var(--color-base-content);
   }
@@ -3562,6 +3568,9 @@
   }
   .text-info {
     color: var(--color-info);
+  }
+  .text-neutral {
+    color: var(--color-neutral);
   }
   .text-neutral-content {
     color: var(--color-neutral-content);
@@ -3664,6 +3673,11 @@
     transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
     transition-duration: var(--tw-duration, var(--default-transition-duration));
   }
+  .transition-all {
+    transition-property: all;
+    transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
+    transition-duration: var(--tw-duration, var(--default-transition-duration));
+  }
   .transition-opacity {
     transition-property: opacity;
     transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
@@ -3747,6 +3761,13 @@
     @layer daisyui.l1.l2 {
       &, &:focus, &:focus-within {
         --input-color: var(--color-error);
+      }
+    }
+  }
+  .toggle-accent {
+    @layer daisyui.l1.l2 {
+      &:checked, &[aria-checked="true"] {
+        --input-color: var(--color-accent);
       }
     }
   }

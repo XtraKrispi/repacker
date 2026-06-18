@@ -4,6 +4,7 @@ import Prelude
 
 import Bgg (bggThing)
 import Component.Helpers (addToast, classList)
+import Component.Helpers as Helpers
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
 import Data.Array (catMaybes, filter, find, intercalate, length, mapWithIndex, null, sortWith)
 import Data.Either (Either(..))
@@ -56,6 +57,7 @@ type CoreData =
 type State =
   { game :: RemoteData String BoardGame
   , instructions :: RemoteData String Instructions
+  , isPrivate :: Boolean
   , images :: Images
   | CoreData
   }
@@ -120,6 +122,7 @@ data Action
   | ToggleBaggies
   | UpdateCustomInsertLink String
   | ImageUploaded PackingStep Event
+  | UpdatePrivacy Boolean
   | Save Event
 
 component :: forall query output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => H.Component query Input output m
@@ -141,6 +144,7 @@ initialState { client, gameId, session, existingKey } =
   , instructions: NotAsked
   , existingKey
   , images: empty
+  , isPrivate: false
   }
 
 handleAction :: forall slots output m. MonadAff m => MonadEffect m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action slots output m Unit
@@ -153,7 +157,7 @@ handleAction Initialize = do
   case existingKey of
     Just key -> do
       modify_ _ { instructions = Loading }
-      mInstructions <- liftAff $ fetchSingleInstructions client key
+      mInstructions <- liftAff $ fetchSingleInstructions client (Just session.userId) key
       case mInstructions of
         Nothing -> do
           addToast { message: "Instructions couldn't be found, redirecting back to game page", severity: S.Error }
@@ -268,6 +272,8 @@ handleAction (ImageUploaded step evt) = do
         Nothing -> do
           pure unit
     _ -> pure unit
+handleAction (UpdatePrivacy checked) = do
+  modify_ _ { isPrivate = checked }
 handleAction (Save evt) = do
   liftEffect $ preventDefault evt
   state <- get
@@ -276,7 +282,7 @@ handleAction (Save evt) = do
       Success instructions -> do
         case state.existingKey of
           Just key -> do
-            results <- liftAff $ Database.updateInstructions state.client state.gameId key instructions state.images
+            results <- liftAff $ Database.updateInstructions state.client state.gameId state.isPrivate key instructions state.images
             case results of
               Right _ -> addToast { message: "Instructions have been saved.", severity: S.Success }
               Left _ -> addToast
@@ -286,7 +292,7 @@ handleAction (Save evt) = do
           Nothing -> do
 
             newKey <- wrap <$> liftEffect genUUID
-            results <- liftAff $ Database.newInstructions state.client state.gameId newKey instructions state.images
+            results <- liftAff $ Database.newInstructions state.client state.gameId state.isPrivate newKey instructions state.images
             case results of
               Right _ -> do
                 addToast
@@ -319,20 +325,39 @@ render state =
                           [ HH.text "Create Repack Guide" ]
                       , HH.p [ HP.class_ (H.ClassName "text-base-content/70") ] [ HH.text "Instructions for organizational perfection." ]
                       ]
-                  , HH.button
-                      [ HP.class_ $ classList
-                          [ "btn" /\ true
-                          , "btn-primary" /\ true
-                          , "px-8" /\ true
-                          , "pointer-events-auto" /\ true
-                          , "cursor-not-allowed" /\ not (null validationErrors)
+                  , HH.div [ HP.class_ (H.ClassName "flex gap-4") ]
+                      [ HH.label [ HP.class_ (H.ClassName "label") ]
+                          [ HH.input
+                              [ HP.type_ InputCheckbox
+                              , HP.class_ (H.ClassName "toggle toggle-accent")
+                              , HP.checked state.isPrivate
+                              , HE.onChecked UpdatePrivacy
+                              ]
+                          , HH.span
+                              [ HP.class_
+                                  ( Helpers.classList
+                                      [ "transition-all" /\ true
+                                      , "text-accent" /\ state.isPrivate
+                                      ]
+                                  )
+                              ]
+                              [ HH.text "Private (visible only to me)" ]
                           ]
-                      , HP.type_ ButtonSubmit
-                      , HP.attr (AttrName "form") "instructions-form"
-                      , HP.disabled (not $ null validationErrors)
-                      , HP.title $ intercalate "\n" $ Tuple.snd <$> validationErrors
-                      ]
-                      [ HH.text "Publish Guide"
+                      , HH.button
+                          [ HP.class_ $ classList
+                              [ "btn" /\ true
+                              , "btn-primary" /\ true
+                              , "px-8" /\ true
+                              , "pointer-events-auto" /\ true
+                              , "cursor-not-allowed" /\ not (null validationErrors)
+                              ]
+                          , HP.type_ ButtonSubmit
+                          , HP.attr (AttrName "form") "instructions-form"
+                          , HP.disabled (not $ null validationErrors)
+                          , HP.title $ intercalate "\n" $ Tuple.snd <$> validationErrors
+                          ]
+                          [ HH.text "Publish Guide"
+                          ]
                       ]
                   ]
               , instructionsForm validationErrors game instructions state.images

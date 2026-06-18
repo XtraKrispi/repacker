@@ -47,10 +47,10 @@ initialState { gameId, client, session } = { gameId, client, session, game: NotA
 
 handleAction :: forall slots output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action slots output m Unit
 handleAction Initialize = do
-  { gameId, client } <- get
+  { gameId, client, session } <- get
   modify_ _ { game = Loading, instructions = Loading }
   bg <- liftAff $ bggThing gameId
-  instructions <- liftAff $ fetchInstructions client gameId
+  instructions <- liftAff $ fetchInstructions client (_.userId <$> session) gameId
   modify_ _ { game = fromEither bg, instructions = Success instructions }
 
 render :: forall action slots m. MonadEffect m => MonadAff m => State -> H.ComponentHTML action slots m
