@@ -12,6 +12,7 @@ package:
     - halogen-store
     - halogen-svg-elems
     - prelude
+    - random
     - remotedata
     - routing
     - routing-duplex

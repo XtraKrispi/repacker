@@ -3,6 +3,7 @@ module Component.Instructions where
 import Prelude
 
 import Bgg (bggThing)
+import Component.ConfirmationButton as ConfirmationButton
 import Component.Helpers (addToast, classList)
 import Component.Helpers as Helpers
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
@@ -40,12 +41,17 @@ import Network.RemoteData as RemoteData
 import Route (Route(..), navigate)
 import Store as S
 import Supabase (Client)
+import Type.Prelude (Proxy(..))
 import Types (BoardGame, GameId, Image(..), Images, Instructions, InstructionsKey, PackingStep, SessionInfo)
 import Web.Event.Event (Event, preventDefault, target)
 import Web.File.File (name, toBlob)
 import Web.File.FileList (item)
 import Web.File.FileReader.Aff as FRA
 import Web.HTML.HTMLInputElement (files, fromEventTarget)
+
+type Slots = (deleteModal :: forall query. H.Slot query ConfirmationButton.Output Int)
+
+_deleteModel = Proxy :: Proxy "deleteModal"
 
 type CoreData =
   ( client :: Client
@@ -124,6 +130,7 @@ data Action
   | ImageUploaded PackingStep Event
   | UpdatePrivacy Boolean
   | Save Event
+  | Delete
 
 component :: forall query output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => H.Component query Input output m
 component = H.mkComponent
@@ -309,8 +316,11 @@ handleAction (Save evt) = do
       _ -> pure unit
   else
     pure unit
+handleAction Delete = do
+  -- TODO: Plumb this through
+  pure unit
 
-render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
+render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state =
   case state.game /\ state.instructions of
     Success game /\ Success instructions ->
@@ -343,12 +353,13 @@ render state =
                               ]
                               [ HH.text "Private (visible only to me)" ]
                           ]
-                      , HH.button
-                          [ HP.class_ (H.ClassName "btn btn-error")
-                          , HP.type_ ButtonButton
-                          ]
-                          [ HH.text "Delete Guide"
-                          ]
+                      , HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete Guide", buttonCss: H.ClassName "btn btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (\_ -> Delete)
+                      -- HH.button
+                      -- [ HP.class_ (H.ClassName "btn btn-error")
+                      -- , HP.type_ ButtonButton
+                      -- ]
+                      -- [ HH.text "Delete Guide"
+                      -- ]
                       , HH.button
                           [ HP.class_ $ classList
                               [ "btn" /\ true

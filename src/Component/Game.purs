@@ -3,6 +3,7 @@ module Component.Game where
 import Prelude
 
 import Bgg (bggThing)
+import Component.ConfirmationButton as ConfirmationButton
 import Data.Array (length)
 import Data.Maybe (Maybe(..), maybe)
 import Database.Instructions (fetchInstructions)
@@ -22,7 +23,12 @@ import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
 import Supabase (Client)
 import Supabase.Auth.Types (UserId)
-import Types (BoardGame, GameId, InstructionsWithUser, SessionInfo)
+import Type.Proxy (Proxy(..))
+import Types (BoardGame, GameId, InstructionsWithUser, SessionInfo, InstructionsKey)
+
+type Slots = (deleteModal :: forall query. H.Slot query ConfirmationButton.Output Int)
+
+_deleteModel = Proxy :: Proxy "deleteModal"
 
 type CoreData = (gameId :: GameId, client :: Client, session :: Maybe SessionInfo)
 type State =
@@ -33,7 +39,7 @@ type State =
 
 type Input = { | CoreData }
 
-data Action = Initialize
+data Action = Initialize | DeleteInstructions InstructionsKey
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -45,15 +51,18 @@ component = H.mkComponent
 initialState :: Input -> State
 initialState { gameId, client, session } = { gameId, client, session, game: NotAsked, instructions: NotAsked }
 
-handleAction :: forall slots output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action slots output m Unit
+handleAction :: forall output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction Initialize = do
   { gameId, client, session } <- get
   modify_ _ { game = Loading, instructions = Loading }
   bg <- liftAff $ bggThing gameId
   instructions <- liftAff $ fetchInstructions client (_.userId <$> session) gameId
   modify_ _ { game = fromEither bg, instructions = Success instructions }
+handleAction (DeleteInstructions key) = do
+  -- TODO: Delete the instructions
+  pure unit
 
-render :: forall action slots m. MonadEffect m => MonadAff m => State -> H.ComponentHTML action slots m
+render :: forall m. MonadEffect m => MonadAff m => State -> H.ComponentHTML Action Slots m
 render { gameId, game, instructions, session } = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
   [ HH.div [] [ renderGameDetails game ]
   , HH.div [ HP.class_ (H.ClassName "divider") ] []
@@ -111,7 +120,7 @@ renderGameDetails (Failure err) = HH.div [ HP.class_ (H.ClassName "alert alert-e
   ]
 renderGameDetails NotAsked = HH.div [] []
 
-renderInstructions :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe SessionInfo -> RemoteData String (Array InstructionsWithUser) -> HH.ComponentHTML action slots m
+renderInstructions :: forall m. MonadAff m => MonadEffect m => GameId -> Maybe SessionInfo -> RemoteData String (Array InstructionsWithUser) -> HH.ComponentHTML Action Slots m
 renderInstructions gameId mUser (Success []) = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ]
   [ Svg.svg
       [ SP.class_ (H.ClassName "h-12 w-12 opacity-40")
@@ -175,7 +184,7 @@ renderInstructions _ _ Loading = HH.div [ HP.class_ (H.ClassName "flex justify-c
   ]
 renderInstructions _ _ _ = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
 
-renderInstructionCard :: forall action slots m. MonadAff m => MonadEffect m => GameId -> Maybe UserId -> InstructionsWithUser -> HH.ComponentHTML action slots m
+renderInstructionCard :: forall m. MonadAff m => MonadEffect m => GameId -> Maybe UserId -> InstructionsWithUser -> HH.ComponentHTML Action Slots m
 renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
   let
     isOwner = mViewerId == Just createdBy
@@ -189,10 +198,7 @@ renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
       , HP.href ("#" <> print routeCodec (UpdateInstructionsR gameId key))
       ]
       [ HH.text "Edit" ]
-    deleteBtn = HH.button
-      [ HP.class_ (H.ClassName "btn btn-sm btn-error")
-      ]
-      [ HH.text "Delete" ]
+    deleteBtn = HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete", buttonCss: H.ClassName "btn btn-sm btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (\_ -> DeleteInstructions key)
   in
     HH.div
       [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]

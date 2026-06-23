@@ -16,6 +16,7 @@
             "halogen-store",
             "halogen-svg-elems",
             "prelude",
+            "random",
             "remotedata",
             "routing",
             "routing-duplex",
@@ -2005,6 +2006,16 @@
         "safe-coerce",
         "transformers",
         "tuples"
+      ]
+    },
+    "random": {
+      "type": "registry",
+      "version": "6.0.0",
+      "integrity": "sha256-7sZRo6P9UIiXDZ9s2QL9T8h3wlIwLdQrR4+oZKOijQw=",
+      "dependencies": [
+        "effect",
+        "integers",
+        "prelude"
       ]
     },
     "read": {
