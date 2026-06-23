@@ -189,6 +189,10 @@ renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
       , HP.href ("#" <> print routeCodec (UpdateInstructionsR gameId key))
       ]
       [ HH.text "Edit" ]
+    deleteBtn = HH.button
+      [ HP.class_ (H.ClassName "btn btn-sm btn-error")
+      ]
+      [ HH.text "Delete" ]
   in
     HH.div
       [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
@@ -206,6 +210,6 @@ renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
                 else HH.text ""
               ]
           , HH.div [ HP.class_ (H.ClassName "card-actions justify-end mt-4") ]
-              $ if isOwner then [ editBtn, viewBtn ] else [ viewBtn ]
+              $ if isOwner then [ editBtn, viewBtn, deleteBtn ] else [ viewBtn ]
           ]
       ]

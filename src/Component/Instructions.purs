@@ -344,6 +344,12 @@ render state =
                               [ HH.text "Private (visible only to me)" ]
                           ]
                       , HH.button
+                          [ HP.class_ (H.ClassName "btn btn-error")
+                          , HP.type_ ButtonButton
+                          ]
+                          [ HH.text "Delete Guide"
+                          ]
+                      , HH.button
                           [ HP.class_ $ classList
                               [ "btn" /\ true
                               , "btn-primary" /\ true

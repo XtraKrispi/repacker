@@ -29,7 +29,7 @@ import Network.RemoteData (RemoteData(..), withDefault)
 import Network.RemoteData as RemoteData
 import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
-import Supabase (Client)
+import Supabase (Client, UserId)
 import Types (BoardGame, FileContents, GameId, Image(..), Images, IncludedExpansions(..), Instructions, InstructionsKey, PackingStep, Profile, SessionInfo, InstructionsWithUser)
 
 type CoreData =
@@ -128,7 +128,7 @@ handleAction CloseExpandedImage = modify_ _ { expandedImage = Nothing }
 render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
 render state = case state.game /\ state.instructions /\ state.authorProfile of
   (Success game /\ Success { createdBy, instructions } /\ Success author) -> HH.div [ HP.class_ (H.ClassName "flex flex-col gap-6 max-w-4xl mx-auto") ]
-    [ renderMetadata author game instructions (editLink createdBy)
+    [ renderMetadata createdBy author state.gameId game state.instructionsKey instructions (_.userId <$> state.session)
     , HH.div [ HP.class_ (H.ClassName "divider") ] []
     , renderStepsHeader state.viewMode (not $ null instructions.steps)
     , case state.viewMode of
@@ -141,15 +141,6 @@ render state = case state.game /\ state.instructions /\ state.authorProfile of
       errors = catMaybes [ failureError state.game, failureError state.instructions, failureError state.authorProfile ]
     in
       if null errors then renderLoading else renderError
-  where
-  -- | Show an Edit link only when the logged-in user authored these instructions.
-  editLink authorId
-    | (_.userId <$> state.session) == Just authorId = HH.a
-        [ HP.class_ (H.ClassName "btn btn-sm btn-secondary")
-        , HP.href ("#" <> print routeCodec (UpdateInstructionsR state.gameId state.instructionsKey))
-        ]
-        [ HH.text "Edit" ]
-    | otherwise = HH.text ""
 
 -- | Pull the error message out of a failed request, ignoring every other state.
 failureError :: forall a. RemoteData String a -> Maybe String
@@ -230,8 +221,8 @@ renderImageLightbox (Just img) = HH.div
       [ HH.text "✕" ]
   ]
 
-renderMetadata :: forall slots m. MonadAff m => MonadEffect m => Maybe Profile -> BoardGame -> Instructions -> H.ComponentHTML Action slots m -> H.ComponentHTML Action slots m
-renderMetadata author game instructions editLink = HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
+renderMetadata :: forall slots m. MonadAff m => MonadEffect m => UserId -> Maybe Profile -> GameId -> BoardGame -> InstructionsKey -> Instructions -> Maybe UserId -> H.ComponentHTML Action slots m
+renderMetadata createdBy author gameId game instructionsKey instructions mSessionUser = HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
   [ HH.div [ HP.class_ (H.ClassName "card-body") ]
       [ HH.div [ HP.class_ (H.ClassName "flex justify-between items-start gap-4") ]
           [ HH.div [ HP.class_ (H.ClassName "flex flex-col gap-1") ]
@@ -276,7 +267,10 @@ renderMetadata author game instructions editLink = HH.div [ HP.class_ (H.ClassNa
               , HH.p [ HP.class_ (H.ClassName "text-sm text-base-content/60") ]
                   [ HH.text $ "Packing guide by " <> extractAuthorName author ]
               ]
-          , editLink
+          , HH.div [ HP.class_ (H.ClassName "flex gap-2") ]
+              [ editLink
+              , deleteLink
+              ]
           ]
       , HH.p [ HP.class_ (H.ClassName "text-base-content/80 mt-2") ]
           [ HH.text instructions.description ]
@@ -305,6 +299,20 @@ renderMetadata author game instructions editLink = HH.div [ HP.class_ (H.ClassNa
           ]
       ]
   ]
+  where
+  editLink
+    | mSessionUser == Just createdBy = HH.a
+        [ HP.class_ (H.ClassName "btn btn-sm btn-secondary")
+        , HP.href ("#" <> print routeCodec (UpdateInstructionsR gameId instructionsKey))
+        ]
+        [ HH.text "Edit" ]
+    | otherwise = HH.text ""
+  deleteLink
+    | mSessionUser == Just createdBy = HH.button
+        [ HP.class_ (H.ClassName "btn btn-sm btn-error")
+        ]
+        [ HH.text "Delete" ]
+    | otherwise = HH.text ""
 
 extractAuthorName :: Maybe Profile -> String
 extractAuthorName Nothing = "unknown"
