@@ -3,6 +3,7 @@ module Component.ViewInstructions where
 import Prelude
 
 import Bgg (bggThing)
+import Component.ConfirmationButton as ConfirmationButton
 import Data.Array (catMaybes, findMap, fromFoldable, index, length, mapWithIndex, null)
 import Data.Either (Either(..))
 import Data.Map as Map
@@ -30,7 +31,12 @@ import Network.RemoteData as RemoteData
 import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
 import Supabase (Client, UserId)
+import Type.Proxy (Proxy(..))
 import Types (BoardGame, FileContents, GameId, Image(..), Images, IncludedExpansions(..), Instructions, InstructionsKey, PackingStep, Profile, SessionInfo, InstructionsWithUser)
+
+type Slots = (deleteModal :: forall query. H.Slot query ConfirmationButton.Output Int)
+
+_deleteModel = Proxy :: Proxy "deleteModal"
 
 type CoreData =
   ( client :: Client
@@ -66,6 +72,7 @@ data Action
   | GoToSlide Int
   | ExpandImage FileContents
   | CloseExpandedImage
+  | Delete
 
 component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
 component = H.mkComponent
@@ -92,7 +99,7 @@ initialState { client, gameId, instructionsKey, session } =
   , images: Map.empty
   }
 
-handleAction :: forall slots output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action slots output m Unit
+handleAction :: forall output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction Initialize = do
   { client, instructionsKey, gameId, session } <- get
   modify_ _
@@ -124,8 +131,11 @@ handleAction PrevSlide = modify_ \state ->
 handleAction (GoToSlide i) = modify_ _ { carouselIndex = i }
 handleAction (ExpandImage img) = modify_ _ { expandedImage = Just img }
 handleAction CloseExpandedImage = modify_ _ { expandedImage = Nothing }
+handleAction Delete =
+  -- TODO: Delete the instructions
+  pure unit
 
-render :: forall slots m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action slots m
+render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state = case state.game /\ state.instructions /\ state.authorProfile of
   (Success game /\ Success { createdBy, instructions } /\ Success author) -> HH.div [ HP.class_ (H.ClassName "flex flex-col gap-6 max-w-4xl mx-auto") ]
     [ renderMetadata createdBy author state.gameId game state.instructionsKey instructions (_.userId <$> state.session)
@@ -221,7 +231,7 @@ renderImageLightbox (Just img) = HH.div
       [ HH.text "✕" ]
   ]
 
-renderMetadata :: forall slots m. MonadAff m => MonadEffect m => UserId -> Maybe Profile -> GameId -> BoardGame -> InstructionsKey -> Instructions -> Maybe UserId -> H.ComponentHTML Action slots m
+renderMetadata :: forall m. MonadAff m => MonadEffect m => UserId -> Maybe Profile -> GameId -> BoardGame -> InstructionsKey -> Instructions -> Maybe UserId -> H.ComponentHTML Action Slots m
 renderMetadata createdBy author gameId game instructionsKey instructions mSessionUser = HH.div [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
   [ HH.div [ HP.class_ (H.ClassName "card-body") ]
       [ HH.div [ HP.class_ (H.ClassName "flex justify-between items-start gap-4") ]
@@ -308,10 +318,7 @@ renderMetadata createdBy author gameId game instructionsKey instructions mSessio
         [ HH.text "Edit" ]
     | otherwise = HH.text ""
   deleteLink
-    | mSessionUser == Just createdBy = HH.button
-        [ HP.class_ (H.ClassName "btn btn-sm btn-error")
-        ]
-        [ HH.text "Delete" ]
+    | mSessionUser == Just createdBy = HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete", buttonCss: H.ClassName "btn btn-error btn-sm", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (const Delete)
     | otherwise = HH.text ""
 
 extractAuthorName :: Maybe Profile -> String

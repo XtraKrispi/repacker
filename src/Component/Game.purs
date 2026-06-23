@@ -26,7 +26,7 @@ import Supabase.Auth.Types (UserId)
 import Type.Proxy (Proxy(..))
 import Types (BoardGame, GameId, InstructionsWithUser, SessionInfo, InstructionsKey)
 
-type Slots = (deleteModal :: forall query. H.Slot query ConfirmationButton.Output Int)
+type Slots = (deleteModal :: forall query. H.Slot query ConfirmationButton.Output InstructionsKey)
 
 _deleteModel = Proxy :: Proxy "deleteModal"
 
@@ -198,7 +198,7 @@ renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
       , HP.href ("#" <> print routeCodec (UpdateInstructionsR gameId key))
       ]
       [ HH.text "Edit" ]
-    deleteBtn = HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete", buttonCss: H.ClassName "btn btn-sm btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (\_ -> DeleteInstructions key)
+    deleteBtn = HH.slot _deleteModel key ConfirmationButton.component { buttonText: "Delete", buttonCss: H.ClassName "btn btn-sm btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (\_ -> DeleteInstructions key)
   in
     HH.div
       [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]

@@ -353,13 +353,7 @@ render state =
                               ]
                               [ HH.text "Private (visible only to me)" ]
                           ]
-                      , HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete Guide", buttonCss: H.ClassName "btn btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (\_ -> Delete)
-                      -- HH.button
-                      -- [ HP.class_ (H.ClassName "btn btn-error")
-                      -- , HP.type_ ButtonButton
-                      -- ]
-                      -- [ HH.text "Delete Guide"
-                      -- ]
+                      , HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete Guide", buttonCss: H.ClassName "btn btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (const Delete)
                       , HH.button
                           [ HP.class_ $ classList
                               [ "btn" /\ true
