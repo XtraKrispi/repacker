@@ -194,7 +194,7 @@ renderInstructions _ _ Loading = HH.div [ HP.class_ (H.ClassName "flex justify-c
 renderInstructions _ _ _ = HH.div [ HP.class_ (H.ClassName "flex justify-center items-center flex-col gap-4 py-16 text-base-content/50") ] []
 
 renderInstructionCard :: forall m. MonadAff m => MonadEffect m => GameId -> Maybe UserId -> InstructionsWithUser -> HH.ComponentHTML Action Slots m
-renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
+renderInstructionCard gameId mViewerId { createdBy, key, instructions, isPrivate } =
   let
     isOwner = mViewerId == Just createdBy
     viewBtn = HH.a
@@ -212,8 +212,22 @@ renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
     HH.div
       [ HP.class_ (H.ClassName "card bg-base-200 shadow-xl") ]
       [ HH.div [ HP.class_ (H.ClassName "card-body") ]
-          [ HH.h3 [ HP.class_ (H.ClassName "card-title text-secondary") ]
-              [ HH.text instructions.description ]
+          [ HH.div [ HP.class_ (H.ClassName "flex justify-between") ]
+              [ HH.h3 [ HP.class_ (H.ClassName "card-title text-secondary") ]
+                  [ HH.text instructions.description ]
+              , if isPrivate then
+                  HH.i
+                    [ HP.title "Only visible to me"
+                    , HP.class_ (H.ClassName "text-secondary")
+                    ]
+                    [ lockIcon ]
+                else
+                  HH.i
+                    [ HP.title "Visible to everyone"
+                    , HP.class_ (H.ClassName "text-secondary")
+                    ]
+                    [ unlockedIcon ]
+              ]
           , HH.div [ HP.class_ (H.ClassName "flex gap-2 flex-wrap mt-2") ]
               [ HH.span [ HP.class_ (H.ClassName "badge badge-ghost") ]
                   [ HH.text $ show (length instructions.steps) <> " step" <> if length instructions.steps == 1 then "" else "s" ]
@@ -228,3 +242,63 @@ renderInstructionCard gameId mViewerId { createdBy, key, instructions } =
               $ if isOwner then [ editBtn, viewBtn, deleteBtn ] else [ viewBtn ]
           ]
       ]
+
+lockIcon ∷ ∀ (p127 ∷ Type) (i128 ∷ Type). HH.HTML p127 i128
+lockIcon = Svg.svg
+  [ SP.class_ (H.ClassName "size-6")
+  , SP.fill NoColor
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.stroke (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.strokeLineCap LineCapRound
+      , SP.strokeLineJoin LineJoinRound
+      , SP.strokeWidth 1.5
+      , SP.d
+          [ SP.m SP.Abs 16.5 10.5
+          , SP.v SP.Abs 6.75
+          , SP.a SP.Rel 4.5 4.5 0.0 SP.Arc1 SP.Sweep0 (-9.0) 0.0
+          , SP.v SP.Rel 3.75
+          , SP.m SP.Rel (-0.75) 11.25
+          , SP.h SP.Rel 10.5
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 2.25 (-2.25)
+          , SP.v SP.Rel (-6.75)
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 (-2.25) (-2.25)
+          , SP.h SP.Abs 6.75
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 (-2.25) 2.25
+          , SP.v SP.Rel 6.75
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 2.25 2.25
+          , SP.z
+          ]
+      ]
+  ]
+
+unlockedIcon ∷ ∀ (p127 ∷ Type) (i128 ∷ Type). HH.HTML p127 i128
+unlockedIcon = Svg.svg
+  [ SP.class_ (H.ClassName "size-6")
+  , SP.fill NoColor
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.stroke (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.strokeLineCap LineCapRound
+      , SP.strokeLineJoin LineJoinRound
+      , SP.strokeWidth 1.5
+      , SP.d
+          [ SP.m SP.Abs 13.5 10.5
+          , SP.v SP.Abs 6.75
+          , SP.a SP.Rel 4.5 4.5 0.0 SP.Arc1 SP.Sweep1 9.0 0.0
+          , SP.v SP.Rel 3.75
+          , SP.m SP.Abs 3.75 21.75
+          , SP.h SP.Rel 10.5
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 2.25 (-2.25)
+          , SP.v SP.Rel (-6.75)
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 (-2.25) (-2.25)
+          , SP.h SP.Abs 3.75
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 (-2.25) 2.25
+          , SP.v SP.Rel 6.75
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 2.25 2.25
+          , SP.z
+          ]
+      ]
+  ]
