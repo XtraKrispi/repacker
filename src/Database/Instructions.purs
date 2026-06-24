@@ -77,7 +77,7 @@ fetchInstructions client userId gameId = do
   -- TODO: Filter on the client, but this isn't ideal (see above)
   pure $ catMaybes $ (map extractData <<< toInstructions) <$> filter (isVisible userId) (fromMaybe [] results.data)
   where
-  extractData { createdBy, key, instructions } = { createdBy, key, instructions }
+  extractData { createdBy, key, instructions, isPrivate } = { createdBy, key, instructions, isPrivate }
 
 fetchUserInstructions :: Client -> UserId -> Aff (Array InstructionsWithGame)
 fetchUserInstructions client userId = do
@@ -88,7 +88,7 @@ fetchUserInstructions client userId = do
     # run
   pure $ catMaybes $ (map extractData <<< toInstructions) <$> fromMaybe [] results.data
   where
-  extractData { gameId, key, instructions } = { gameId, key, instructions }
+  extractData { gameId, key, instructions, isPrivate } = { gameId, key, instructions, isPrivate }
 
 fetchSingleInstructions :: Client -> Maybe UserId -> InstructionsKey -> Aff (Maybe InstructionsWithUser)
 fetchSingleInstructions client userId key = do
@@ -99,7 +99,7 @@ fetchSingleInstructions client userId key = do
         # eq_ @"instructions_key" (wrap $ unwrap key)
         # maybeSingle
     )
-  pure $ (\{ createdBy, instructions } -> { createdBy, key, instructions }) <$>
+  pure $ (\{ createdBy, instructions, isPrivate } -> { createdBy, key, instructions, isPrivate }) <$>
     ( results
         >>= (\x -> if isVisible userId x then Just x else Nothing)
         >>= toInstructions
@@ -197,6 +197,7 @@ toInstructions row =
     , gameId: wrap row.bgg_id
     , key: Key (unwrap row.instructions_key)
     , instructions: _
+    , isPrivate: row.is_private
     }
   ) <$> deserializeInstructions row.data
 

@@ -134,6 +134,7 @@ type Images = Map FileName Image
 type InstructionsResult =
   ( key :: InstructionsKey
   , instructions :: Instructions
+  , isPrivate :: Boolean
   )
 
 type FullInstructions = { createdBy :: UserId, gameId :: GameId | InstructionsResult }
