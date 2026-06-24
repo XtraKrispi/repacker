@@ -49,6 +49,8 @@ import Web.File.FileList (item)
 import Web.File.FileReader.Aff as FRA
 import Web.HTML.HTMLInputElement (files, fromEventTarget)
 
+-- TODO: Included expansions are not saving
+
 type Slots = (deleteModal :: forall query. H.Slot query ConfirmationButton.Output Int)
 
 _deleteModel = Proxy :: Proxy "deleteModal"
@@ -420,7 +422,7 @@ instructionsForm validationErrors game instructions images =
                             , HH.span [ HP.class_ (H.ClassName "label-text-alt text-info") ] [ HH.text "Check all that apply" ]
                             ]
                         , HH.div [ HP.class_ (H.ClassName "border border-base-300 rounded-lg max-h-48 overflow-y-auto p-2 bg-base-50 flex flex-col gap-1") ]
-                            $ renderExpansion <$> game.expansions
+                            $ renderExpansion instructions <$> game.expansions
                         ]
                     ]
                 ]
@@ -549,10 +551,16 @@ renderStep validationErrors images step =
                     , "border-1" /\ (not $ isValid validationErrors ("step" <> show step.stepOrdinal <> ":image"))
                     ]
                 ]
-                [ HH.span [ HP.class_ (H.ClassName "flex flex-col items-center justify-center w-24 h-24") ] [ renderImage (step.image >>= (\image -> Map.lookup image images)) ]
+                [ HH.span
+                    [ HP.class_
+                        (H.ClassName "flex flex-col items-center justify-center w-24 h-24")
+                    ]
+                    [ renderImage (step.image >>= (\image -> Map.lookup image images))
+                    ]
                 , HH.input
-                    [ HP.required true
+                    [ HP.required (isNothing step.image)
                     , HP.type_ InputFile
+                    , HP.name $ "step-" <> show step.stepOrdinal <> "-image"
                     , HP.class_ (H.ClassName "hidden")
                     , HP.accept (mediaType (MediaType "image/*"))
                     , HE.onChange (ImageUploaded step)
@@ -594,14 +602,18 @@ renderImage Nothing =
 renderImage (Just (Uploaded _ imageContent)) = HH.img [ HP.src imageContent ]
 renderImage (Just (Downloaded imageContent)) = HH.img [ HP.src imageContent ]
 
-renderExpansion :: forall slots m. MonadAff m => MonadEffect m => { gameId :: GameId, title :: String } -> HH.ComponentHTML Action slots m
-renderExpansion { gameId, title } =
-  HH.label [ HP.class_ (H.ClassName "label cursor-pointer hover:bg-base-200 rounded px-2") ]
-    [ HH.span [ HP.class_ (H.ClassName "label-text") ] [ HH.text title ]
-    , HH.input
-        [ HP.type_ InputCheckbox
-        , HP.class_ (H.ClassName "checkbox checkbox-sm checkbox-primary")
-        , HP.value (unwrap gameId)
-        , HE.onChange (\_ -> ToggleExpansion gameId)
-        ]
-    ]
+renderExpansion :: forall slots m. MonadAff m => MonadEffect m => Instructions -> { gameId :: GameId, title :: String } -> HH.ComponentHTML Action slots m
+renderExpansion instructions { gameId, title } =
+  let
+    containsExpansion = Set.member gameId $ unwrap instructions.includedExpansions
+  in
+    HH.label [ HP.class_ (H.ClassName "label cursor-pointer hover:bg-base-200 rounded px-2") ]
+      [ HH.span [ HP.class_ (H.ClassName "label-text") ] [ HH.text title ]
+      , HH.input
+          [ HP.type_ InputCheckbox
+          , HP.class_ (H.ClassName "checkbox checkbox-sm checkbox-primary")
+          , HP.value (unwrap gameId)
+          , HP.checked containsExpansion
+          , HE.onChange (\_ -> ToggleExpansion gameId)
+          ]
+      ]

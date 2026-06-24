@@ -160,9 +160,8 @@ saveInstructions operation client gameId isPrivate instructionsKey instructions 
 newInstructions :: Client -> GameId -> Boolean -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
 newInstructions = saveInstructions insert
 
--- TODO: Test this
 updateInstructions :: Client -> GameId -> Boolean -> InstructionsKey -> Instructions -> Images -> Aff (Either InstructionsSaveError Unit)
-updateInstructions = saveInstructions update
+updateInstructions client gameId isPrivate key = saveInstructions (\row queryBuilder -> queryBuilder # update row # eq_ @"instructions_key" (wrap $ unwrap key)) client gameId isPrivate key
 
 uploadStepImage :: Client -> InstructionsKey -> Tuple FileName File -> Aff (Tuple FileName (Maybe String))
 uploadStepImage client instructionsKey (fileName /\ file) = do
