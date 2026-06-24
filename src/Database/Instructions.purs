@@ -6,6 +6,7 @@ module Database.Instructions
   , updateInstructions
   , fetchUserInstructions
   , InstructionsSaveError(..)
+  , deleteInstructions
   ) where
 
 import Prelude
@@ -19,7 +20,7 @@ import Data.Filterable (filterMap)
 import Data.Foldable (foldr)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
@@ -28,12 +29,12 @@ import Data.UUID (toString)
 import Effect.Aff (Aff, catchError)
 import Foreign (Foreign)
 import Prim.RowList (class RowToList)
-import Supabase (Client, FilterBuilder, QueryBuilder, StoragePath(..), Table, download, eq_, from, fromStorage, insert, maybeSingle, mkTable, run, select, update, upload)
+import Supabase (Client, FilterBuilder, QueryBuilder, StoragePath(..), Table, download, eq_, from, fromStorage, insert, maybeSingle, mkTable, run, select, update, upload, delete)
 import Supabase.Auth.Types (UserId)
-import Supabase.Storage (list)
+import Supabase.Storage (list, remove)
 import Supabase.Types (BucketName(..))
 import Supabase.UUID (UUID)
-import Types (FileContents, FileName, GameId, Image(..), Images, Instructions, InstructionsKey, InstructionsWithGame, InstructionsWithUser, Key(..), FullInstructions)
+import Types (FileContents, FileName, FullInstructions, GameId, Image(..), Images, Instructions, InstructionsWithGame, InstructionsWithUser, Key(..), InstructionsKey)
 import Web.File.File (File)
 import Web.File.FileReader.Aff as FRA
 import Yoga.JSON (class ReadForeignFields, read, write)
@@ -202,3 +203,19 @@ toInstructions row =
 deserializeInstructions :: Foreign -> Maybe Instructions
 deserializeInstructions obj = hush $ read obj
 
+deleteInstructions :: Client -> InstructionsKey -> Aff (Either String Unit)
+deleteInstructions client key = do
+  deleteResults <- client
+    # from instructionsTable
+    # delete
+    # eq_ @"instructions_key" (wrap $ unwrap key)
+    # run
+
+  case deleteResults.error of
+    Just err -> pure $ Left err.message
+    Nothing -> do
+      -- This doesn't seem to be working
+      imagesResults <- client
+        # fromStorage (BucketName "images")
+        # remove [ StoragePath $ toString (unwrap key) ]
+      pure $ maybe (Right unit) (\err -> Left err.message) imagesResults.error

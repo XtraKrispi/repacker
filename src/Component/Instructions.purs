@@ -8,7 +8,7 @@ import Component.Helpers (addToast, classList)
 import Component.Helpers as Helpers
 import DOM.HTML.Indexed.InputAcceptType (mediaType)
 import Data.Array (catMaybes, filter, find, intercalate, length, mapWithIndex, null, sortWith)
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Foldable (maximum)
 import Data.Map (empty)
 import Data.Map as Map
@@ -20,7 +20,7 @@ import Data.Tuple (Tuple)
 import Data.Tuple as Tuple
 import Data.Tuple.Nested ((/\))
 import Data.UUID (genUUID, toString)
-import Database.Instructions (fetchImagesForInstructions, fetchSingleInstructions)
+import Database.Instructions (deleteInstructions, fetchImagesForInstructions, fetchSingleInstructions)
 import Database.Instructions as Database
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -42,7 +42,7 @@ import Route (Route(..), navigate)
 import Store as S
 import Supabase (Client)
 import Type.Prelude (Proxy(..))
-import Types (BoardGame, GameId, Image(..), Images, Instructions, InstructionsKey, PackingStep, SessionInfo)
+import Types (BoardGame, GameId, Image(..), Images, Instructions, PackingStep, SessionInfo, InstructionsKey)
 import Web.Event.Event (Event, preventDefault, target)
 import Web.File.File (name, toBlob)
 import Web.File.FileList (item)
@@ -130,7 +130,7 @@ data Action
   | ImageUploaded PackingStep Event
   | UpdatePrivacy Boolean
   | Save Event
-  | Delete
+  | Delete InstructionsKey
 
 component :: forall query output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => H.Component query Input output m
 component = H.mkComponent
@@ -316,9 +316,13 @@ handleAction (Save evt) = do
       _ -> pure unit
   else
     pure unit
-handleAction Delete = do
-  -- TODO: Plumb this through
-  pure unit
+handleAction (Delete key) = do
+  { client, gameId } <- get
+  results <- liftAff $ deleteInstructions client key
+  either
+    (const $ addToast { message: "There was a problem deleting the instructions, please try again.", severity: S.Error })
+    (const $ navigate (GameR gameId))
+    results
 
 render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state =
@@ -353,7 +357,9 @@ render state =
                               ]
                               [ HH.text "Private (visible only to me)" ]
                           ]
-                      , HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete Guide", buttonCss: H.ClassName "btn btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (const Delete)
+                      , case state.existingKey of
+                          Just key -> HH.slot _deleteModel 0 ConfirmationButton.component { buttonText: "Delete Guide", buttonCss: H.ClassName "btn btn-error", modalContent: "Are you sure you want to delete these instructions? The operation cannot be undone." } (const (Delete key))
+                          Nothing -> HH.text ""
                       , HH.button
                           [ HP.class_ $ classList
                               [ "btn" /\ true

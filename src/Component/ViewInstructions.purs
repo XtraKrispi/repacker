@@ -4,14 +4,15 @@ import Prelude
 
 import Bgg (bggThing)
 import Component.ConfirmationButton as ConfirmationButton
+import Component.Helpers (addToast)
 import Data.Array (catMaybes, findMap, fromFoldable, index, length, mapWithIndex, null)
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (traverse)
 import Data.Tuple.Nested ((/\))
-import Database.Instructions (fetchImagesForInstructions, fetchSingleInstructions)
+import Database.Instructions (deleteInstructions, fetchImagesForInstructions, fetchSingleInstructions)
 import Database.Profile (fetchProfile)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
@@ -21,6 +22,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (ButtonType(..))
 import Halogen.HTML.Properties as HP
+import Halogen.Store.Monad (class MonadStore)
 import Halogen.Svg.Attributes (Color(..))
 import Halogen.Svg.Attributes as SP
 import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
@@ -28,8 +30,9 @@ import Halogen.Svg.Attributes.StrokeLineJoin (StrokeLineJoin(..))
 import Halogen.Svg.Elements as Svg
 import Network.RemoteData (RemoteData(..), withDefault)
 import Network.RemoteData as RemoteData
-import Route (Route(..), routeCodec)
+import Route (Route(..), navigate, routeCodec)
 import Routing.Duplex (print)
+import Store as S
 import Supabase (Client, UserId)
 import Type.Proxy (Proxy(..))
 import Types (BoardGame, FileContents, GameId, Image(..), Images, IncludedExpansions(..), Instructions, InstructionsKey, PackingStep, Profile, SessionInfo, InstructionsWithUser)
@@ -74,7 +77,7 @@ data Action
   | CloseExpandedImage
   | Delete
 
-component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
+component :: forall query output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => H.Component query Input output m
 component = H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval
@@ -99,7 +102,7 @@ initialState { client, gameId, instructionsKey, session } =
   , images: Map.empty
   }
 
-handleAction :: forall output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action Slots output m Unit
+handleAction :: forall output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction Initialize = do
   { client, instructionsKey, gameId, session } <- get
   modify_ _
@@ -131,9 +134,13 @@ handleAction PrevSlide = modify_ \state ->
 handleAction (GoToSlide i) = modify_ _ { carouselIndex = i }
 handleAction (ExpandImage img) = modify_ _ { expandedImage = Just img }
 handleAction CloseExpandedImage = modify_ _ { expandedImage = Nothing }
-handleAction Delete =
-  -- TODO: Delete the instructions
-  pure unit
+handleAction Delete = do
+  { client, gameId, instructionsKey } <- get
+  results <- liftAff $ deleteInstructions client instructionsKey
+  either
+    (const $ addToast { message: "There was a problem deleting the instructions, please try again.", severity: S.Error })
+    (const $ navigate (GameR gameId))
+    results
 
 render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state = case state.game /\ state.instructions /\ state.authorProfile of

@@ -4,15 +4,19 @@ import Prelude
 
 import Bgg (bggThing)
 import Component.ConfirmationButton as ConfirmationButton
+import Component.Helpers (addToast)
 import Data.Array (length)
+import Data.Either (either)
+import Data.Filterable (filter)
 import Data.Maybe (Maybe(..), maybe)
-import Database.Instructions (fetchInstructions)
+import Database.Instructions (deleteInstructions, fetchInstructions)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
 import Halogen (get, modify_)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
+import Halogen.Store.Monad (class MonadStore)
 import Halogen.Svg.Attributes (Color(..))
 import Halogen.Svg.Attributes as SP
 import Halogen.Svg.Attributes.StrokeLineCap (StrokeLineCap(..))
@@ -21,6 +25,7 @@ import Halogen.Svg.Elements as Svg
 import Network.RemoteData (RemoteData(..), fromEither)
 import Route (Route(..), routeCodec)
 import Routing.Duplex (print)
+import Store as S
 import Supabase (Client)
 import Supabase.Auth.Types (UserId)
 import Type.Proxy (Proxy(..))
@@ -41,7 +46,7 @@ type Input = { | CoreData }
 
 data Action = Initialize | DeleteInstructions InstructionsKey
 
-component :: forall query output m. MonadEffect m => MonadAff m => H.Component query Input output m
+component :: forall query output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => H.Component query Input output m
 component = H.mkComponent
   { initialState
   , eval: H.mkEval H.defaultEval { initialize = Just Initialize, handleAction = handleAction }
@@ -51,7 +56,7 @@ component = H.mkComponent
 initialState :: Input -> State
 initialState { gameId, client, session } = { gameId, client, session, game: NotAsked, instructions: NotAsked }
 
-handleAction :: forall output m. MonadEffect m => MonadAff m => Action -> H.HalogenM State Action Slots output m Unit
+handleAction :: forall output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => Action -> H.HalogenM State Action Slots output m Unit
 handleAction Initialize = do
   { gameId, client, session } <- get
   modify_ _ { game = Loading, instructions = Loading }
@@ -59,8 +64,12 @@ handleAction Initialize = do
   instructions <- liftAff $ fetchInstructions client (_.userId <$> session) gameId
   modify_ _ { game = fromEither bg, instructions = Success instructions }
 handleAction (DeleteInstructions key) = do
-  -- TODO: Delete the instructions
-  pure unit
+  { client, instructions } <- get
+  results <- liftAff $ deleteInstructions client key
+  either
+    (const $ addToast { message: "There was a problem deleting the instructions, please try again.", severity: S.Error })
+    (const $ modify_ _ { instructions = (filter (\s -> s.key /= key)) <$> instructions })
+    results
 
 render :: forall m. MonadEffect m => MonadAff m => State -> H.ComponentHTML Action Slots m
 render { gameId, game, instructions, session } = HH.div [ HP.class_ (H.ClassName "flex flex-col gap-4") ]
