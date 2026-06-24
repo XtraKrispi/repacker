@@ -20,7 +20,7 @@ import Data.Filterable (filterMap)
 import Data.Foldable (foldr)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (unwrap, wrap)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
@@ -214,8 +214,11 @@ deleteInstructions client key = do
   case deleteResults.error of
     Just err -> pure $ Left err.message
     Nothing -> do
-      -- This doesn't seem to be working
-      imagesResults <- client
-        # fromStorage (BucketName "images")
-        # remove [ StoragePath $ toString (unwrap key) ]
-      pure $ maybe (Right unit) (\err -> Left err.message) imagesResults.error
+      -- Need to iterate through images and delete each one
+      let storageBucket = fromStorage (BucketName "images") client
+      allImages <- storageBucket # list (StoragePath $ toString (unwrap key)) {}
+      case allImages.data of
+        Just images -> do
+          _ <- traverse (\{ name } -> remove [ StoragePath $ (toString (unwrap key)) <> "/" <> name ] storageBucket) images
+          pure $ Right unit
+        Nothing -> pure $ Right unit

@@ -1,6 +1,6 @@
 ## TODO List:
 
-[] Allow deletion of submissions
+[x] Allow deletion of submissions
 [] Public/Private submissions
 [] Voting/ranking (upvote)
 [] Test update (it may not work)
@@ -9,3 +9,4 @@
 [] Fix the purescript-supabase repo to allow UserId to be part of an OR/AND call
 [x] Use FFI OTP to include redirecturl when local
 [] Indicate private instructions on listing page
+[] Privacy is not correctly toggle on load of the edit page
