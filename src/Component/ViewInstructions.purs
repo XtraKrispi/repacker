@@ -19,6 +19,7 @@ import Effect.Class (class MonadEffect)
 import Halogen (get, modify_)
 import Halogen as H
 import Halogen.HTML as HH
+import Halogen.HTML.Events (onClick)
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (ButtonType(..))
 import Halogen.HTML.Properties as HP
@@ -76,6 +77,8 @@ data Action
   | ExpandImage FileContents
   | CloseExpandedImage
   | Delete
+  | Upvote
+  | Downvote
 
 component :: forall query output m. MonadEffect m => MonadAff m => MonadStore S.Action S.Store m => H.Component query Input output m
 component = H.mkComponent
@@ -141,6 +144,8 @@ handleAction Delete = do
     (const $ addToast { message: "There was a problem deleting the instructions, please try again.", severity: S.Error })
     (const $ navigate (GameR gameId))
     results
+handleAction Upvote = pure unit
+handleAction Downvote = pure unit
 
 render :: forall m. MonadAff m => MonadEffect m => State -> H.ComponentHTML Action Slots m
 render state = case state.game /\ state.instructions /\ state.authorProfile of
@@ -243,42 +248,56 @@ renderMetadata createdBy author gameId game instructionsKey instructions mSessio
   [ HH.div [ HP.class_ (H.ClassName "card-body") ]
       [ HH.div [ HP.class_ (H.ClassName "flex justify-between items-start gap-4") ]
           [ HH.div [ HP.class_ (H.ClassName "flex flex-col gap-1") ]
-              [ HH.a
-                  [ HP.href ("https://boardgamegeek.com/boardgame/" <> unwrap game.bggId)
-                  , HP.target "_blank"
-                  , HP.class_ (H.ClassName "flex items-center gap-2 text-3xl font-bold text-primary hover:underline hover:underline-offset-8")
-                  ]
-                  [ HH.span []
-                      [ HH.text game.title
-                      , maybe (HH.text "") (\y -> HH.text (" (" <> show y <> ")")) game.yearPublished
+              [ HH.div [ HP.class_ (H.ClassName "flex gap-4 items-center") ]
+                  [ HH.a
+                      [ HP.href ("https://boardgamegeek.com/boardgame/" <> unwrap game.bggId)
+                      , HP.target "_blank"
+                      , HP.class_ (H.ClassName "flex items-center gap-2 text-3xl font-bold text-primary hover:underline hover:underline-offset-8")
                       ]
-                  , Svg.svg
-                      [ SP.class_ (H.ClassName "size-6")
-                      , SP.fill NoColor
-                      , SP.viewBox 0.0 0.0 24.0 24.0
-                      , SP.stroke (Named "currentColor")
-                      ]
-                      [ Svg.path
-                          [ SP.strokeLineCap LineCapRound
-                          , SP.strokeLineJoin LineJoinRound
-                          , SP.strokeWidth 1.5
-                          , SP.d
-                              [ SP.m SP.Abs 13.5 6.0
-                              , SP.h SP.Abs 5.25
-                              , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 3.0 8.25
-                              , SP.v SP.Rel 10.5
-                              , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 5.25 21.0
-                              , SP.h SP.Rel 10.5
-                              , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 18.0 18.75
-                              , SP.v SP.Abs 10.5
-                              , SP.m SP.Rel (-10.5) 6.0
-                              , SP.l SP.Abs 21.0 3.0
-                              , SP.m SP.Rel 0.0 0.0
-                              , SP.h SP.Rel (-5.25)
-                              , SP.m SP.Abs 21.0 3.0
-                              , SP.v SP.Rel 5.25
+                      [ HH.span []
+                          [ HH.text game.title
+                          , maybe (HH.text "") (\y -> HH.text (" (" <> show y <> ")")) game.yearPublished
+                          ]
+                      , Svg.svg
+                          [ SP.class_ (H.ClassName "size-6")
+                          , SP.fill NoColor
+                          , SP.viewBox 0.0 0.0 24.0 24.0
+                          , SP.stroke (Named "currentColor")
+                          ]
+                          [ Svg.path
+                              [ SP.strokeLineCap LineCapRound
+                              , SP.strokeLineJoin LineJoinRound
+                              , SP.strokeWidth 1.5
+                              , SP.d
+                                  [ SP.m SP.Abs 13.5 6.0
+                                  , SP.h SP.Abs 5.25
+                                  , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 3.0 8.25
+                                  , SP.v SP.Rel 10.5
+                                  , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 5.25 21.0
+                                  , SP.h SP.Rel 10.5
+                                  , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 18.0 18.75
+                                  , SP.v SP.Abs 10.5
+                                  , SP.m SP.Rel (-10.5) 6.0
+                                  , SP.l SP.Abs 21.0 3.0
+                                  , SP.m SP.Rel 0.0 0.0
+                                  , SP.h SP.Rel (-5.25)
+                                  , SP.m SP.Abs 21.0 3.0
+                                  , SP.v SP.Rel 5.25
+                                  ]
                               ]
                           ]
+                      ]
+                  , HH.div [ HP.class_ (H.ClassName "flex gap-2") ]
+                      [ HH.i
+                          [ HP.class_ (H.ClassName "cursor-pointer transition-all hover:text-secondary")
+                          , onClick (const Downvote)
+                          ]
+                          [ downvoteIcon ]
+                      , HH.i
+                          [ HP.class_ (H.ClassName "cursor-pointer transition-all hover:text-secondary")
+                          , onClick (const Upvote)
+                          ]
+                          [ upvoteIcon ]
                       ]
                   ]
               , HH.p [ HP.class_ (H.ClassName "text-sm text-base-content/60") ]
@@ -592,3 +611,206 @@ renderCarousel images steps currentIndex =
 getFileContents :: Image -> FileContents
 getFileContents (Downloaded f) = f
 getFileContents (Uploaded _ f) = f
+
+downvoteIcon ∷ forall a b. HH.HTML a b
+downvoteIcon = Svg.svg
+  [ SP.class_ (H.ClassName "size-6")
+  , SP.fill NoColor
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.stroke (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.strokeLineCap LineCapRound
+      , SP.strokeLineJoin LineJoinRound
+      , SP.strokeWidth 1.5
+      , SP.d
+          [ SP.m SP.Abs 7.498 15.25
+          , SP.h SP.Abs 4.372
+          , SP.c SP.Rel (-1.026) 0.0 (-1.945) (-0.694) (-2.054) (-1.715)
+          , SP.a SP.Rel 12.137 12.137 0.0 SP.Arc0 SP.Sweep1 (-0.068) (-1.285)
+          , SP.c SP.Rel 0.0 (-2.848) 0.992 (-5.464) 2.649 (-7.521)
+          , SP.c SP.Abs 5.287 4.247 5.886 4.0 6.504 4.0
+          , SP.h SP.Rel 4.016
+          , SP.a SP.Rel 4.5 4.5 0.0 SP.Arc0 SP.Sweep1 1.423 0.23
+          , SP.l SP.Rel 3.114 1.04
+          , SP.a SP.Rel 4.5 4.5 0.0 SP.Arc0 SP.Sweep0 1.423 0.23
+          , SP.h SP.Rel 1.294
+          , SP.m SP.Abs 7.498 15.25
+          , SP.c SP.Rel 0.618 0.0 0.991 0.724 0.725 1.282
+          , SP.a SP.Abs 7.471 7.471 0.0 SP.Arc0 SP.Sweep0 7.5 19.75
+          , SP.a SP.Abs 2.25 2.25 0.0 SP.Arc0 SP.Sweep0 9.75 22.0
+          , SP.a SP.Rel 0.75 0.75 0.0 SP.Arc0 SP.Sweep0 0.75 (-0.75)
+          , SP.v SP.Rel (-0.633)
+          , SP.c SP.Rel 0.0 (-0.573) 0.11 (-1.14) 0.322 (-1.672)
+          , SP.c SP.Rel 0.304 (-0.76) 0.93 (-1.33) 1.653 (-1.715)
+          , SP.a SP.Rel 9.04 9.04 0.0 SP.Arc0 SP.Sweep0 2.86 (-2.4)
+          , SP.c SP.Rel 0.498 (-0.634) 1.226 (-1.08) 2.032 (-1.08)
+          , SP.h SP.Rel 0.384
+          , SP.m SP.Rel (-10.253) 1.5
+          , SP.h SP.Abs 9.7
+          , SP.m SP.Rel 8.075 (-9.75)
+          , SP.c SP.Rel 0.01 0.05 0.027 0.1 0.05 0.148
+          , SP.c SP.Rel 0.593 1.2 0.925 2.55 0.925 3.977
+          , SP.c SP.Rel 0.0 1.487 (-0.36) 2.89 (-0.999) 4.125
+          , SP.m SP.Rel 0.023 (-8.25)
+          , SP.c SP.Rel (-0.076) (-0.365) 0.183 (-0.75) 0.575 (-0.75)
+          , SP.h SP.Rel 0.908
+          , SP.c SP.Rel 0.889 0.0 1.713 0.518 1.972 1.368
+          , SP.c SP.Rel 0.339 1.11 0.521 2.287 0.521 3.507
+          , SP.c SP.Rel 0.0 1.553 (-0.295) 3.036 (-0.831) 4.398
+          , SP.c SP.Rel (-0.306) 0.774 (-1.086) 1.227 (-1.918) 1.227
+          , SP.h SP.Rel (-1.053)
+          , SP.c SP.Rel (-0.472) 0.0 (-0.745) (-0.556) (-0.5) (-0.96)
+          , SP.a SP.Rel 8.95 8.95 0.0 SP.Arc0 SP.Sweep0 0.303 (-0.54)
+          ]
+      ]
+  ]
+
+downvoteIconSolid ∷ forall a b. HH.HTML a b
+downvoteIconSolid = Svg.svg
+  [ SP.class_ (H.ClassName "size-6")
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.fill (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.d
+          [ SP.m SP.Abs 15.73 5.5
+          , SP.h SP.Rel 1.035
+          , SP.a SP.Abs 7.465 7.465 0.0 SP.Arc0 SP.Sweep1 18.0 9.625
+          , SP.a SP.Rel 7.465 7.465 0.0 SP.Arc0 SP.Sweep1 (-1.235) 4.125
+          , SP.h SP.Rel (-0.148)
+          , SP.c SP.Rel (-0.806) 0.0 (-1.534) 0.446 (-2.031) 1.08
+          , SP.a SP.Rel 9.04 9.04 0.0 SP.Arc0 SP.Sweep1 (-2.861) 2.4
+          , SP.c SP.Rel (-0.723) 0.384 (-1.35) 0.956 (-1.653) 1.715
+          , SP.a SP.Rel 4.499 4.499 0.0 SP.Arc0 SP.Sweep0 (-0.322) 1.672
+          , SP.v SP.Rel 0.633
+          , SP.a SP.Abs 0.75 0.75 0.0 SP.Arc0 SP.Sweep1 9.0 22.0
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep1 (-2.25) (-2.25)
+          , SP.c SP.Rel 0.0 (-1.152) 0.26 (-2.243) 0.723 (-3.218)
+          , SP.c SP.Rel 0.266 (-0.558) (-0.107) (-1.282) (-0.725) (-1.282)
+          , SP.h SP.Abs 3.622
+          , SP.c SP.Rel (-1.026) 0.0 (-1.945) (-0.694) (-2.054) (-1.715)
+          , SP.a SP.Abs 12.137 12.137 0.0 SP.Arc0 SP.Sweep1 1.5 12.25
+          , SP.c SP.Rel 0.0 (-2.848) 0.992 (-5.464) 2.649 (-7.521)
+          , SP.c SP.Abs 4.537 4.247 5.136 4.0 5.754 4.0
+          , SP.h SP.Abs 9.77
+          , SP.a SP.Rel 4.5 4.5 0.0 SP.Arc0 SP.Sweep1 1.423 0.23
+          , SP.l SP.Rel 3.114 1.04
+          , SP.a SP.Rel 4.5 4.5 0.0 SP.Arc0 SP.Sweep0 1.423 0.23
+          , SP.z
+          , SP.m SP.Abs 21.669 14.023
+          , SP.c SP.Rel 0.536 (-1.362) 0.831 (-2.845) 0.831 (-4.398)
+          , SP.c SP.Rel 0.0 (-1.22) (-0.182) (-2.398) (-0.52) (-3.507)
+          , SP.c SP.Rel (-0.26) (-0.85) (-1.084) (-1.368) (-1.973) (-1.368)
+          , SP.h SP.Abs 19.1
+          , SP.c SP.Rel (-0.445) 0.0 (-0.72) 0.498 (-0.523) 0.898
+          , SP.c SP.Rel 0.591 1.2 0.924 2.55 0.924 3.977
+          , SP.a SP.Rel 8.958 8.958 0.0 SP.Arc0 SP.Sweep1 (-1.302) 4.666
+          , SP.c SP.Rel (-0.245) 0.403 0.028 0.959 0.5 0.959
+          , SP.h SP.Rel 1.053
+          , SP.c SP.Rel 0.832 0.0 1.612 (-0.453) 1.918 (-1.227)
+          , SP.z
+          ]
+      ]
+  ]
+
+upvoteIcon :: forall a b. HH.HTML a b
+upvoteIcon = Svg.svg
+  [ SP.class_ (H.ClassName "size-6")
+  , SP.fill NoColor
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.stroke (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.strokeLineCap LineCapRound
+      , SP.strokeLineJoin LineJoinRound
+      , SP.strokeWidth 1.5
+      , SP.d
+          [ SP.m SP.Abs 6.633 10.25
+          , SP.c SP.Rel 0.806 0.0 1.533 (-0.446) 2.031 (-1.08)
+          , SP.a SP.Rel 9.041 9.041 0.0 SP.Arc0 SP.Sweep1 2.861 (-2.4)
+          , SP.c SP.Rel 0.723 (-0.384) 1.35 (-0.956) 1.653 (-1.715)
+          , SP.a SP.Rel 4.498 4.498 0.0 SP.Arc0 SP.Sweep0 0.322 (-1.672)
+          , SP.v SP.Abs 2.75
+          , SP.a SP.Rel 0.75 0.75 0.0 SP.Arc0 SP.Sweep1 0.75 (-0.75)
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep1 2.25 2.25
+          , SP.c SP.Rel 0.0 1.152 (-0.26) 2.243 (-0.723) 3.218
+          , SP.c SP.Rel (-0.266) 0.558 0.107 1.282 0.725 1.282
+          , SP.m SP.Rel 0.0 0.0
+          , SP.h SP.Rel 3.126
+          , SP.c SP.Rel 1.026 0.0 1.945 0.694 2.054 1.715
+          , SP.c SP.Rel 0.045 0.422 0.068 0.85 0.068 1.285
+          , SP.a SP.Rel 11.95 11.95 0.0 SP.Arc0 SP.Sweep1 (-2.649) 7.521
+          , SP.c SP.Rel (-0.388) 0.482 (-0.987) 0.729 (-1.605) 0.729
+          , SP.h SP.Abs 13.48
+          , SP.c SP.Rel (-0.483) 0.0 (-0.964) (-0.078) (-1.423) (-0.23)
+          , SP.l SP.Rel (-3.114) (-1.04)
+          , SP.a SP.Rel 4.501 4.501 0.0 SP.Arc0 SP.Sweep0 (-1.423) (-0.23)
+          , SP.h SP.Abs 5.904
+          , SP.m SP.Rel 10.598 (-9.75)
+          , SP.h SP.Abs 14.25
+          , SP.m SP.Abs 5.904 18.5
+          , SP.c SP.Rel 0.083 0.205 0.173 0.405 0.27 0.602
+          , SP.c SP.Rel 0.197 0.4 (-0.078) 0.898 (-0.523) 0.898
+          , SP.h SP.Rel (-0.908)
+          , SP.c SP.Rel (-0.889) 0.0 (-1.713) (-0.518) (-1.972) (-1.368)
+          , SP.a SP.Rel 12.0 12.0 0.0 SP.Arc0 SP.Sweep1 (-0.521) (-3.507)
+          , SP.c SP.Rel 0.0 (-1.553) 0.295 (-3.036) 0.831 (-4.398)
+          , SP.c SP.Abs 3.387 9.953 4.167 9.5 5.0 9.5
+          , SP.h SP.Rel 1.053
+          , SP.c SP.Rel 0.472 0.0 0.745 0.556 0.5 0.96
+          , SP.a SP.Rel 8.958 8.958 0.0 SP.Arc0 SP.Sweep0 (-1.302) 4.665
+          , SP.c SP.Rel 0.0 1.194 0.232 2.333 0.654 3.375
+          , SP.z
+          ]
+      ]
+  ]
+
+upvoteIconSolid :: forall a b. HH.HTML a b
+upvoteIconSolid = Svg.svg
+  [ SP.class_ (H.ClassName "size-6")
+  , SP.viewBox 0.0 0.0 24.0 24.0
+  , SP.fill (Named "currentColor")
+  ]
+  [ Svg.path
+      [ SP.d
+          [ SP.m SP.Abs 7.493 18.5
+          , SP.c SP.Rel (-0.425) 0.0 (-0.82) (-0.236) (-0.975) (-0.632)
+          , SP.a SP.Abs 7.48 7.48 0.0 SP.Arc0 SP.Sweep1 6.0 15.125
+          , SP.c SP.Rel 0.0 (-1.75) 0.599 (-3.358) 1.602 (-4.634)
+          , SP.c SP.Rel 0.151 (-0.192) 0.373 (-0.309) 0.6 (-0.397)
+          , SP.c SP.Rel 0.473 (-0.183) 0.89 (-0.514) 1.212 (-0.924)
+          , SP.a SP.Rel 9.042 9.042 0.0 SP.Arc0 SP.Sweep1 2.861 (-2.4)
+          , SP.c SP.Rel 0.723 (-0.384) 1.35 (-0.956) 1.653 (-1.715)
+          , SP.a SP.Rel 4.498 4.498 0.0 SP.Arc0 SP.Sweep0 0.322 (-1.672)
+          , SP.v SP.Abs 2.75
+          , SP.a SP.Abs 0.75 0.75 0.0 SP.Arc0 SP.Sweep1 15.0 2.0
+          , SP.a SP.Rel 2.25 2.25 0.0 SP.Arc0 SP.Sweep1 2.25 2.25
+          , SP.c SP.Rel 0.0 1.152 (-0.26) 2.243 (-0.723) 3.218
+          , SP.c SP.Rel (-0.266) 0.558 0.107 1.282 0.725 1.282
+          , SP.h SP.Rel 3.126
+          , SP.c SP.Rel 1.026 0.0 1.945 0.694 2.054 1.715
+          , SP.c SP.Rel 0.045 0.422 0.068 0.85 0.068 1.285
+          , SP.a SP.Rel 11.95 11.95 0.0 SP.Arc0 SP.Sweep1 (-2.649) 7.521
+          , SP.c SP.Rel (-0.388) 0.482 (-0.987) 0.729 (-1.605) 0.729
+          , SP.h SP.Abs 14.23
+          , SP.c SP.Rel (-0.483) 0.0 (-0.964) (-0.078) (-1.423) (-0.23)
+          , SP.l SP.Rel (-3.114) (-1.04)
+          , SP.a SP.Rel 4.501 4.501 0.0 SP.Arc0 SP.Sweep0 (-1.423) (-0.23)
+          , SP.h SP.Rel (-0.777)
+          , SP.z
+          , SP.m SP.Abs 2.331 10.727
+          , SP.a SP.Rel 11.969 11.969 0.0 SP.Arc0 SP.Sweep0 (-0.831) 4.398
+          , SP.a SP.Rel 12.0 12.0 0.0 SP.Arc0 SP.Sweep0 0.52 3.507
+          , SP.c SP.Abs 2.28 19.482 3.105 20.0 3.994 20.0
+          , SP.h SP.Abs 4.9
+          , SP.c SP.Rel 0.445 0.0 0.72 (-0.498) 0.523 (-0.898)
+          , SP.a SP.Rel 8.963 8.963 0.0 SP.Arc0 SP.Sweep1 (-0.924) (-3.977)
+          , SP.c SP.Rel 0.0 (-1.708) 0.476 (-3.305) 1.302 (-4.666)
+          , SP.c SP.Rel 0.245 (-0.403) (-0.028) (-0.959) (-0.5) (-0.959)
+          , SP.h SP.Abs 4.25
+          , SP.c SP.Rel (-0.832) 0.0 (-1.612) 0.453 (-1.918) 1.227
+          , SP.z
+          ]
+      ]
+  ]

@@ -150,3 +150,5 @@ derive instance Generic Environment _
 
 instance Show Environment where
   show = genericShow
+
+data VoteType = Upvote | Downvote
